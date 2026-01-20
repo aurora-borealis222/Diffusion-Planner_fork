@@ -7,13 +7,13 @@ from torch.utils.data import DataLoader, DistributedSampler
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 from diffusion_planner.model.diffusion_planner import Diffusion_Planner
+from diffusion_planner.utils.swarm_dataset import SwarmDataset
 
 from diffusion_planner.utils.train_utils import set_seed, save_model, resume_model
 from diffusion_planner.utils.normalizer import ObservationNormalizer, StateNormalizer
 from diffusion_planner.utils.lr_schedule import CosineAnnealingWarmUpRestarts
 from diffusion_planner.utils.tb_log import TensorBoardLogger as Logger
 from diffusion_planner.utils.data_augmentation import StatePerturbation
-from diffusion_planner.utils.dataset import DiffusionPlannerData
 from diffusion_planner.utils import ddp
 
 from diffusion_planner.train_epoch import train_epoch
@@ -38,7 +38,7 @@ def get_args():
     parser.add_argument('--train_set', type=str, help='path to train data', default=None)
     parser.add_argument('--train_set_list', type=str, help='data list of train data', default=None)
 
-    parser.add_argument('--future_len', type=int, help='number of time point', default=80)
+    parser.add_argument('--future_len', type=int, help='number of time point', default=10)
     parser.add_argument('--time_len', type=int, help='number of time point', default=21)
 
     parser.add_argument('--agent_state_dim', type=int, help='past state dim for agents', default=11)
@@ -58,19 +58,19 @@ def get_args():
     # DataLoader parameters
     parser.add_argument('--augment_prob', type=float, help='augmentation probability', default=0.5)
     parser.add_argument('--normalization_file_path', default='normalization.json', help='filepath of normalizaiton.json', type=str)
-    parser.add_argument('--use_data_augment', default=True, type=boolean)
-    parser.add_argument('--num_workers', default=4, type=int)
+    parser.add_argument('--use_data_augment', default=False, type=boolean)
+    parser.add_argument('--num_workers', default=0, type=int)
     parser.add_argument('--pin-mem', action='store_true', help='Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.')
     parser.add_argument('--no-pin-mem', action='store_false', dest='pin_mem', help='')
     parser.set_defaults(pin_mem=True)
     
     # Training
     parser.add_argument('--seed', type=int, help='fix random seed', default=3407)
-    parser.add_argument('--train_epochs', type=int, help='epochs of training', default=500)
+    parser.add_argument('--train_epochs', type=int, help='epochs of training', default=1)
     parser.add_argument('--save_utd', type=int, help='save frequency', default=20)
-    parser.add_argument('--batch_size', type=int, help='batch size (default: 2048)', default=2048)
+    parser.add_argument('--batch_size', type=int, help='batch size (default: 2048)', default=32)
     parser.add_argument('--learning_rate', type=float, help='learning rate (default: 5e-4)', default=5e-4)
-    parser.add_argument('--warm_up_epoch', type=int, help='number of warm up', default=5)
+    parser.add_argument('--warm_up_epoch', type=int, help='number of warm up', default=0)
     parser.add_argument('--encoder_drop_path_rate', type=float, help='encoder drop out rate', default=0.1)
     parser.add_argument('--decoder_drop_path_rate', type=float, help='decoder drop out rate', default=0.1)
 
@@ -95,10 +95,13 @@ def get_args():
     parser.add_argument('--notes', default='', type=str)
 
     # distributed training parameters
-    parser.add_argument('--ddp', default=True, type=boolean, help='use ddp or not')
+    parser.add_argument('--ddp', default=False, type=boolean, help='use ddp or not')
     parser.add_argument('--port', default='22323', type=str, help='port')
 
     args = parser.parse_args()
+    
+    if not hasattr(args, "guidance_fn"):
+    	args.guidance_fn = None
 
     args.state_normalizer = StateNormalizer.from_json(args)
     args.observation_normalizer = ObservationNormalizer.from_json(args)
@@ -145,7 +148,13 @@ def model_training(args):
     
     # set up data loaders
     aug = StatePerturbation(augment_prob=args.augment_prob, device=args.device) if args.use_data_augment else None
-    train_set = DiffusionPlannerData(args.train_set, args.train_set_list, args.agent_num, args.predicted_neighbor_num, args.future_len)
+    # train_set = DiffusionPlannerData(args.train_set, args.train_set_list, args.agent_num, args.predicted_neighbor_num, args.future_len)
+    train_set = SwarmDataset(
+        data_dir=args.train_set,
+        data_list=args.train_set_list,
+        past_neighbor_num=args.agent_num,
+        predicted_neighbor_num=args.predicted_neighbor_num
+    )
     train_sampler = DistributedSampler(train_set, num_replicas=ddp.get_world_size(), rank=global_rank, shuffle=True)
     train_loader = DataLoader(train_set, sampler=train_sampler, batch_size=batch_size//ddp.get_world_size(), num_workers=args.num_workers, pin_memory=args.pin_mem, drop_last=True)
    

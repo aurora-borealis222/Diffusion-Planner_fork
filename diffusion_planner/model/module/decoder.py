@@ -21,8 +21,9 @@ class Decoder(nn.Module):
         self._sde = VPSDE_linear()
 
         self.dit = DiT(
-            sde=self._sde, 
-            route_encoder = RouteEncoder(config.route_num, config.lane_len, drop_path_rate=config.encoder_drop_path_rate, hidden_dim=config.hidden_dim),
+            sde=self._sde,
+            route_encoder=None,
+            # route_encoder = RouteEncoder(config.route_num, config.lane_len, drop_path_rate=config.encoder_drop_path_rate, hidden_dim=config.hidden_dim),
             depth=config.decoder_depth, 
             output_dim= (config.future_len + 1) * 4, # x, y, cos, sin
             hidden_dim=config.hidden_dim, 
@@ -88,7 +89,9 @@ class Decoder(nn.Module):
         route_lanes = inputs['route_lanes']
 
         if self.training:
+            # assert sampled_trajectories.shape[-1] == (self._future_len + 1) * 4
             sampled_trajectories = inputs['sampled_trajectories'].reshape(B, P, -1) # [B, 1 + predicted_neighbor_num, (1 + V_future) * 4]
+            assert sampled_trajectories.shape[-1] == (self._future_len + 1) * 4
             diffusion_time = inputs['diffusion_time']
 
             return {
@@ -114,7 +117,7 @@ class Decoder(nn.Module):
                         xT,
                         other_model_params={
                             "cross_c": ego_neighbor_encoding, 
-                            "route_lanes": route_lanes,
+                            # "route_lanes": route_lanes,
                             "neighbor_current_mask": neighbor_current_mask                            
                         },
                         dpm_solver_params={
@@ -126,7 +129,7 @@ class Decoder(nn.Module):
                                 "model": self.dit,
                                 "model_condition": {
                                     "cross_c": ego_neighbor_encoding, 
-                                    "route_lanes": route_lanes,
+                                    # "route_lanes": route_lanes,
                                     "neighbor_current_mask": neighbor_current_mask                            
                                 },
                                 "inputs": inputs,
@@ -217,16 +220,20 @@ class DiT(nn.Module):
         cross_c: (B, N, D)      -> Cross-Attention context
         """
         B, P, _ = x.shape
-        
+
+        expected = (10 + 1) * 4
+        assert x.shape[-1] == expected, \
+            f"x has {x.shape[-1]} dims, but expected {expected}"
+
         x = self.preproj(x)
 
         x_embedding = torch.cat([self.agent_embedding.weight[0][None, :], self.agent_embedding.weight[1][None, :].expand(P - 1, -1)], dim=0)  # (P, D)
         x_embedding = x_embedding[None, :, :].expand(B, -1, -1) # (B, P, D)
         x = x + x_embedding     
 
-        route_encoding = self.route_encoder(route_lanes)
-        y = route_encoding
-        y = y + self.t_embedder(t)      
+        # route_encoding = self.route_encoder(route_lanes)
+        # y = route_encoding
+        y = self.t_embedder(t)
 
         attn_mask = torch.zeros((B, P), dtype=torch.bool, device=x.device)
         attn_mask[:, 1:] = neighbor_current_mask

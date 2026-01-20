@@ -85,6 +85,30 @@ def train_epoch(data_loader, model, optimizer, args, ema, aug: StatePerturbation
             dim=-1,
             )
             neighbors_future[mask] = 0.
+
+            # ego current: [x, y, heading] -> [x, y, cos, sin]
+            ego = inputs["ego_current_state"]
+            inputs["ego_current_state"] = torch.cat(
+                [
+                    ego[..., :2],
+                    torch.stack([ego[..., 2].cos(), ego[..., 2].sin()], dim=-1),
+                ],
+                dim=-1,
+            )
+
+            # neighbors current (all past steps)
+            nbr = inputs["neighbor_agents_past"]
+            inputs["neighbor_agents_past"] = torch.cat(
+                [
+                    nbr[..., :2],
+                    torch.stack([nbr[..., 2].cos(), nbr[..., 2].sin()], dim=-1),
+                ],
+                dim=-1,
+            )
+
+            for k, v in inputs.items():
+                print(k, v.shape)
+
             inputs = args.observation_normalizer(inputs)
                   
             # call the mdoel
