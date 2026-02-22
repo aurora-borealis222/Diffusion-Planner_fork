@@ -59,7 +59,7 @@ def get_args():
     parser.add_argument('--augment_prob', type=float, help='augmentation probability', default=0.5)
     parser.add_argument('--normalization_file_path', default='normalization.json', help='filepath of normalizaiton.json', type=str)
     parser.add_argument('--use_data_augment', default=False, type=boolean)
-    parser.add_argument('--num_workers', default=0, type=int)
+    parser.add_argument('--num_workers', default=2, type=int)
     parser.add_argument('--pin-mem', action='store_true', help='Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.')
     parser.add_argument('--no-pin-mem', action='store_false', dest='pin_mem', help='')
     parser.set_defaults(pin_mem=True)
@@ -151,7 +151,7 @@ def model_training(args):
     # train_set = DiffusionPlannerData(args.train_set, args.train_set_list, args.agent_num, args.predicted_neighbor_num, args.future_len)
     train_set = SwarmDataset(
         data_dir=args.train_set,
-        data_list=args.train_set_list,
+        #data_list=args.train_set_list,
         past_neighbor_num=args.agent_num,
         predicted_neighbor_num=args.predicted_neighbor_num
     )
