@@ -1,5 +1,9 @@
 import os
 import torch
+
+torch.backends.cuda.matmul.allow_tf32 = True
+torch.backends.cudnn.allow_tf32 = True
+
 import argparse
 from torch import optim
 from timm.utils import ModelEma
@@ -59,7 +63,7 @@ def get_args():
     parser.add_argument('--augment_prob', type=float, help='augmentation probability', default=0.5)
     parser.add_argument('--normalization_file_path', default='normalization.json', help='filepath of normalizaiton.json', type=str)
     parser.add_argument('--use_data_augment', default=False, type=boolean)
-    parser.add_argument('--num_workers', default=2, type=int)
+    parser.add_argument('--num_workers', default=16, type=int)
     parser.add_argument('--pin-mem', action='store_true', help='Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.')
     parser.add_argument('--no-pin-mem', action='store_false', dest='pin_mem', help='')
     parser.set_defaults(pin_mem=True)
@@ -68,7 +72,7 @@ def get_args():
     parser.add_argument('--seed', type=int, help='fix random seed', default=3407)
     parser.add_argument('--train_epochs', type=int, help='epochs of training', default=1)
     parser.add_argument('--save_utd', type=int, help='save frequency', default=20)
-    parser.add_argument('--batch_size', type=int, help='batch size (default: 2048)', default=32)
+    parser.add_argument('--batch_size', type=int, help='batch size (default: 2048)', default=64)
     parser.add_argument('--learning_rate', type=float, help='learning rate (default: 5e-4)', default=5e-4)
     parser.add_argument('--warm_up_epoch', type=int, help='number of warm up', default=0)
     parser.add_argument('--encoder_drop_path_rate', type=float, help='encoder drop out rate', default=0.1)
@@ -156,7 +160,7 @@ def model_training(args):
         predicted_neighbor_num=args.predicted_neighbor_num
     )
     train_sampler = DistributedSampler(train_set, num_replicas=ddp.get_world_size(), rank=global_rank, shuffle=True)
-    train_loader = DataLoader(train_set, sampler=train_sampler, batch_size=batch_size//ddp.get_world_size(), num_workers=args.num_workers, pin_memory=args.pin_mem, drop_last=True)
+    train_loader = DataLoader(train_set, sampler=train_sampler, batch_size=batch_size, num_workers=args.num_workers, pin_memory=True, persistent_workers=True)
    
     if global_rank == 0:
         print("Dataset Prepared: {} train data\n".format(len(train_set)))
