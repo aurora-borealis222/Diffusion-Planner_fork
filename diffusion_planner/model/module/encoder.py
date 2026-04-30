@@ -108,7 +108,7 @@ class AgentFusionEncoder(nn.Module):
         x: B, P, V, 4  (x, y, cos, sin)
         """
         # x: B, P, V, D
-        print("Agent input:", x.shape)
+        # print("Agent input:", x.shape)
 
         B, P, V, D = x.shape
         assert D == 4, f"Expected 4 features, got {D}"
@@ -120,15 +120,15 @@ class AgentFusionEncoder(nn.Module):
         # pos[..., -3] = 1.0  # agent type
 
         # === valid mask (VERY IMPORTANT) ===
-        print("Before mask, x:", x.shape)
+        # print("Before mask, x:", x.shape)
         mask_v = torch.sum(torch.ne(x, 0), dim=-1) == 0  # B,P,V
-        print("mask_v:", mask_v.shape)
+        # print("mask_v:", mask_v.shape)
 
         mask_p = torch.sum(~mask_v, dim=-1) == 0  # B,P
 
         # add validity channel
         x = torch.cat([x, (~mask_v).float().unsqueeze(-1)], dim=-1)
-        print("After cat, x:", x.shape)
+        # print("After cat, x:", x.shape)
         # x: B,P,V,5
 
         x = x.view(B * P, V, 5)

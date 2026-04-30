@@ -106,8 +106,8 @@ def train_epoch(data_loader, model, optimizer, args, ema, aug: StatePerturbation
                 dim=-1,
             )
 
-            for k, v in inputs.items():
-                print(k, v.shape)
+            # for k, v in inputs.items():
+            #     print(k, v.shape)
 
             inputs = args.observation_normalizer(inputs)
                   
@@ -135,7 +135,8 @@ def train_epoch(data_loader, model, optimizer, args, ema, aug: StatePerturbation
             nn.utils.clip_grad_norm_(model.parameters(), 5)
             optimizer.step()
 
-            ema.update(model)
+            if ema is not None:
+                ema.update(model)
 
             if args.ddp:
                 torch.cuda.synchronize()

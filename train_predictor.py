@@ -21,6 +21,7 @@ from diffusion_planner.utils.data_augmentation import StatePerturbation
 from diffusion_planner.utils import ddp
 
 from diffusion_planner.train_epoch import train_epoch
+from diffusion_planner.validate_epoch import validate_epoch
 
 def boolean(v):
     if isinstance(v, bool):
@@ -40,7 +41,16 @@ def get_args():
 
     # Data
     parser.add_argument('--train_set', type=str, help='path to train data', default=None)
-    parser.add_argument('--train_set_list', type=str, help='data list of train data', default=None)
+    # parser.add_argument('--train_set_list', type=str, help='data list of train data', default=None)
+    parser.add_argument('--val_set', type=str, required=True)
+    parser.add_argument('--test_set', type=str, required=False)
+
+    parser.add_argument('--train_set_list', type=str, default='train.json')
+    parser.add_argument('--val_set_list', type=str, default='val.json')
+    parser.add_argument('--test_set_list', type=str, default='test.json')
+
+    parser.add_argument('--quick_val_experiments', type=int, default=5)
+    parser.add_argument('--full_val_every', type=int, default=3)
 
     parser.add_argument('--future_len', type=int, help='number of time point', default=10)
     parser.add_argument('--time_len', type=int, help='number of time point', default=21)
@@ -153,15 +163,39 @@ def model_training(args):
     # set up data loaders
     aug = StatePerturbation(augment_prob=args.augment_prob, device=args.device) if args.use_data_augment else None
     # train_set = DiffusionPlannerData(args.train_set, args.train_set_list, args.agent_num, args.predicted_neighbor_num, args.future_len)
+    # train_set = SwarmDataset(
+    #     data_dir=args.train_set,
+    #     #data_list=args.train_set_list,
+    #     past_neighbor_num=args.agent_num,
+    #     predicted_neighbor_num=args.predicted_neighbor_num
+    # )
+
     train_set = SwarmDataset(
         data_dir=args.train_set,
-        #data_list=args.train_set_list,
+        data_list=args.train_set_list,
         past_neighbor_num=args.agent_num,
         predicted_neighbor_num=args.predicted_neighbor_num
     )
+
+    val_set = SwarmDataset(
+        data_dir=args.val_set,
+        data_list=args.val_set_list,
+        past_neighbor_num=args.agent_num,
+        predicted_neighbor_num=args.predicted_neighbor_num
+    )
+
     train_sampler = DistributedSampler(train_set, num_replicas=ddp.get_world_size(), rank=global_rank, shuffle=True)
     train_loader = DataLoader(train_set, sampler=train_sampler, batch_size=batch_size, num_workers=args.num_workers, pin_memory=True, persistent_workers=True)
-   
+
+    val_loader = DataLoader(
+        val_set,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=args.num_workers,
+        pin_memory=True,
+        persistent_workers=True
+    )
+
     if global_rank == 0:
         print("Dataset Prepared: {} train data\n".format(len(train_set)))
 
@@ -204,23 +238,54 @@ def model_training(args):
     if args.ddp:
         torch.distributed.barrier()
 
+    best_ade = float("inf")
+
     # begin training
     for epoch in range(init_epoch, train_epochs):
         if global_rank == 0:
             print(f"Epoch {epoch+1}/{train_epochs}")
         train_loss, train_total_loss = train_epoch(train_loader, diffusion_planner, optimizer, args, model_ema, aug)
-        
-
 
         if global_rank == 0:
             lr_dict = {'lr': optimizer.param_groups[0]['lr']}
             wandb_logger.log_metrics({f"train_loss/{k}": v for k, v in train_loss.items()}, step=epoch+1)
             wandb_logger.log_metrics({f"lr/{k}": v for k, v in lr_dict.items()}, step=epoch+1)
 
-            if (epoch+1) % args.save_utd == 0:
-                # save model at the end of epoch
-                save_model(diffusion_planner, optimizer, scheduler, save_path, epoch, train_total_loss, wandb_logger.id, model_ema.ema)
-                print(f"Model saved in {save_path}\n")
+            # save model at the end of epoch
+            save_model(diffusion_planner, optimizer, scheduler, save_path, epoch, train_total_loss, wandb_logger.id, model_ema.ema)
+            print(f"Model saved in {save_path}\n")
+
+            val_metrics = validate_epoch(
+                val_loader,
+                diffusion_planner,
+                args,
+                max_experiments=args.quick_val_experiments
+            )
+
+            print(f"[Quick Val] ADE={val_metrics['ADE']:.4f}")
+
+            # -------------------------
+            # FULL VALIDATION
+            # -------------------------
+            if (epoch + 1) % args.full_val_every == 0:
+
+                val_metrics = validate_epoch(
+                    val_loader,
+                    diffusion_planner,
+                    args,
+                    max_experiments=None
+                )
+
+                print(f"[FULL Val] ADE={val_metrics['ADE']:.4f}")
+
+                # save best
+                if val_metrics["ADE"] < best_ade:
+                    best_ade = val_metrics["ADE"]
+
+                    torch.save(
+                        diffusion_planner.state_dict(),
+                        os.path.join(save_path, "best_model.pt")
+                    )
 
         scheduler.step()
         train_sampler.set_epoch(epoch + 1)

@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import json
 from torch.utils.data import Dataset
 
 
@@ -32,16 +33,26 @@ class SwarmDataset(Dataset):
         data_dir: str,
         past_neighbor_num: int,
         predicted_neighbor_num: int,
+        data_list: str = None
     ):
         self.data_dir = data_dir
         self._past_neighbor_num = past_neighbor_num
         self._predicted_neighbor_num = predicted_neighbor_num
 
         # список экспериментов
-        self.exp_dirs = sorted(
-            d for d in os.listdir(data_dir)
-            if os.path.isdir(os.path.join(data_dir, d))
-        )
+        # self.exp_dirs = sorted(
+        #     d for d in os.listdir(data_dir)
+        #     if os.path.isdir(os.path.join(data_dir, d))
+        # )
+
+        if data_list is None:
+            self.exp_dirs = sorted(
+                d for d in os.listdir(data_dir)
+                if os.path.isdir(os.path.join(data_dir, d))
+            )
+        else:
+            with open(data_list, "r") as f:
+                self.exp_dirs = json.load(f)
 
         if len(self.exp_dirs) == 0:
             raise RuntimeError(f"No experiments found in {data_dir}")
@@ -115,6 +126,7 @@ class SwarmDataset(Dataset):
             np.array(d["route_lanes"][frame_idx], copy=True),
             np.array(d["route_lanes_speed_limit"][frame_idx], copy=True),
             np.array(d["route_lanes_has_speed_limit"][frame_idx], copy=True),
-            np.array(d["static_objects"][frame_idx], copy=True)
+            np.array(d["static_objects"][frame_idx], copy=True),
+            exp_idx
         )
 
