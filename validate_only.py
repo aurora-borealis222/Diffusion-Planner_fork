@@ -27,7 +27,10 @@ def main():
     params = [{'params': ddp.get_model(model, args.ddp).parameters(), 'lr': args.learning_rate}]
 
     optimizer = optim.AdamW(params)
-    scheduler = CosineAnnealingWarmUpRestarts(optimizer, train_epochs, args.warm_up_epoch)
+
+    train_epochs = 1
+    warm_up_epoch = 0
+    scheduler = CosineAnnealingWarmUpRestarts(optimizer, train_epochs, warm_up_epoch)
 
     model_ema = ModelEma(model, decay=0.999, device=args.device)
 
