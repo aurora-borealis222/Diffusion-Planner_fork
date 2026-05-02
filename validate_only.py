@@ -1,6 +1,7 @@
 import torch
 from torch.utils.data import DataLoader
 
+from torch import optim
 from diffusion_planner.model.diffusion_planner import Diffusion_Planner
 from diffusion_planner.utils.swarm_dataset import SwarmDataset
 from diffusion_planner.validate_epoch import validate_epoch
