@@ -25,33 +25,33 @@ def compute_fde(pred, gt):
 # Swarm метрики
 # -----------------------------
 def compute_swarm_ade(pred, gt, mask):
-    """
-    pred, gt: [B, P, T, 4]
-    mask: [B, P, T] (True = валидный агент)
-    """
+    valid_mask = ~mask
+
     pred_xy = pred[..., :2]
     gt_xy = gt[..., :2]
 
     dist = torch.norm(pred_xy - gt_xy, dim=-1)  # [B, P, T]
 
-    dist = dist * mask  # зануляем невалидных
-    denom = mask.sum(dim=(1, 2)) + 1e-6  # [B]
+    dist = dist * valid_mask
+    denom = valid_mask.sum(dim=(1, 2)) + 1e-6
 
-    return dist.sum(dim=(1, 2)) / denom  # [B]
+    return dist.sum(dim=(1, 2)) / denom
 
 
 def compute_swarm_fde(pred, gt, mask):
+    valid_mask = ~mask
+
     pred_xy = pred[..., :2]
     gt_xy = gt[..., :2]
 
-    final_dist = torch.norm(pred_xy[:, :, -1] - gt_xy[:, :, -1], dim=-1)  # [B, P]
+    final_dist = torch.norm(pred_xy[:, :, -1] - gt_xy[:, :, -1], dim=-1)
 
-    final_mask = mask[:, :, -1]  # [B, P]
+    final_mask = valid_mask[:, :, -1]
 
     final_dist = final_dist * final_mask
-    denom = final_mask.sum(dim=1) + 1e-6  # [B]
+    denom = final_mask.sum(dim=1) + 1e-6
 
-    return final_dist.sum(dim=1) / denom  # [B]
+    return final_dist.sum(dim=1) / denom
 
 
 # -----------------------------
@@ -115,7 +115,13 @@ def validate_epoch(
 
         ego_future = data[1].to(args.device)
         neighbors_future = data[3].to(args.device)
-        neighbor_future_mask = data[11].to(args.device)  # предполагаем, что он есть
+
+        neighbor_future_mask = torch.sum(
+            torch.ne(neighbor_future[..., :3], 0),
+            dim=-1
+        ) == 0
+
+        # neighbor_future_mask = data[11].to(args.device)  # предполагаем, что он есть
 
         neighbors_valid = ~neighbor_future_mask  # True = валидный
 
