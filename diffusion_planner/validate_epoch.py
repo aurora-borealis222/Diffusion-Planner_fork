@@ -117,7 +117,7 @@ def validate_epoch(
         neighbors_future = data[3].to(args.device)
 
         neighbor_future_mask = torch.sum(
-            torch.ne(neighbor_future[..., :3], 0),
+            torch.ne(neighbors_future[..., :3], 0),
             dim=-1
         ) == 0
 
