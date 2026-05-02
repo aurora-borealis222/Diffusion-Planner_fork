@@ -175,6 +175,26 @@ def validate_epoch(
 
         pred_all = out["prediction"]  # [B, P, T, 4]
 
+
+        # === DEBUG SCALE CHECK ===
+        gt_all_debug = torch.cat([ego_future[:, None], neighbors_future], dim=1)
+
+        print("PRED mean:", pred_all[..., :2].mean().item())
+        print("GT mean:", gt_all_debug[..., :2].mean().item())
+
+        print("PRED std:", pred_all[..., :2].std().item())
+        print("GT std:", gt_all_debug[..., :2].std().item())
+
+        # === NORMALIZER CHECK ===
+        normed_inputs = args.observation_normalizer(inputs)
+
+        print("Input diff after renorm:",
+              (normed_inputs["ego_current_state"] - inputs["ego_current_state"]).abs().mean().item())
+
+        print("Input ego mean:", inputs["ego_current_state"].mean().item())
+        print("Input ego std:", inputs["ego_current_state"].std().item())
+
+
         pred_ego = pred_all[:, 0]
         pred_neighbors = pred_all[:, 1:]
 
@@ -196,6 +216,10 @@ def validate_epoch(
 
         batch_swarm_ade = compute_swarm_ade(pred_all, gt_all, full_mask)
         batch_swarm_fde = compute_swarm_fde(pred_all, gt_all, full_mask)
+
+        # === DEBUG ===
+        print("ego ADE:", batch_ade.mean().item())
+        print("swarm ADE:", batch_swarm_ade.mean().item())
 
         # --------------------------------------------------
         # SAVE
