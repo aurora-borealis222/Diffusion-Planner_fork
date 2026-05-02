@@ -15,8 +15,8 @@ TRAIN_SET_PATH="/home/jovyan/AndreiZ/MARL/TatyanaG/swarm_data_npy" # preprocess 
 $RUN_PYTHON_PATH train_predictor.py \
 --train_set  $TRAIN_SET_PATH \
 --val_set  $TRAIN_SET_PATH \
-#--num_workers 2 \
-#--batch_size 32 \
+--num_workers 8 \
+#--batch_size 128 \
 #--train_set_list  $TRAIN_SET_LIST_PATH \
 
 #./torch_run.sh & disown
