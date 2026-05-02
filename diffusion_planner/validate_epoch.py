@@ -121,9 +121,29 @@ def validate_epoch(
             dim=-1
         ) == 0
 
+        # heading -> cos/sin
+        ego_future = torch.cat(
+            [
+                ego_future[..., :2],
+                torch.stack([ego_future[..., 2].cos(), ego_future[..., 2].sin()], dim=-1),
+            ],
+            dim=-1,
+        )
+
+        neighbors_future = torch.cat(
+            [
+                neighbors_future[..., :2],
+                torch.stack([neighbors_future[..., 2].cos(), neighbors_future[..., 2].sin()], dim=-1),
+            ],
+            dim=-1,
+        )
+
+        # зануление невалидных
+        neighbors_future[neighbor_future_mask] = 0.
+
         # neighbor_future_mask = data[11].to(args.device)  # предполагаем, что он есть
 
-        neighbors_valid = ~neighbor_future_mask  # True = валидный
+        # neighbors_valid = ~neighbor_future_mask  # True = валидный
 
         # --------------------------------------------------
         # heading -> cos/sin
@@ -162,9 +182,12 @@ def validate_epoch(
         gt_all = torch.cat([ego_future[:, None], neighbors_future], dim=1)
 
         # mask
-        ego_mask = torch.ones_like(ego_future[..., 0], dtype=torch.bool)
-        full_mask = torch.cat([ego_mask[:, None], neighbors_valid], dim=1)
+        ego_mask = torch.zeros_like(ego_future[..., 0], dtype=torch.bool)  # ego всегда валиден
 
+        full_mask = torch.cat(
+            [ego_mask[:, None], neighbor_future_mask],
+            dim=1
+        )
         # --------------------------------------------------
         # METRICS
         # --------------------------------------------------

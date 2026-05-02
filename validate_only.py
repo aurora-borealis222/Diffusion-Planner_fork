@@ -85,7 +85,7 @@ def main():
         max_experiments=args.quick_val_experiments
     )
 
-    print(f"[Quick Val] ADE={val_metrics['ADE']:.4f}")
+    print(f"[Quick Val] ADE={metrics['ADE']:.4f}")
 
     print("\n===== VALIDATION RESULTS =====")
     for k, v in metrics.items():

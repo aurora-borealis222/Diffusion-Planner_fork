@@ -117,7 +117,7 @@ class Decoder(nn.Module):
                         xT,
                         other_model_params={
                             "cross_c": ego_neighbor_encoding, 
-                            # "route_lanes": route_lanes,
+                            "route_lanes": route_lanes,
                             "neighbor_current_mask": neighbor_current_mask                            
                         },
                         dpm_solver_params={
@@ -129,7 +129,7 @@ class Decoder(nn.Module):
                                 "model": self.dit,
                                 "model_condition": {
                                     "cross_c": ego_neighbor_encoding, 
-                                    # "route_lanes": route_lanes,
+                                    "route_lanes": route_lanes,
                                     "neighbor_current_mask": neighbor_current_mask                            
                                 },
                                 "inputs": inputs,
