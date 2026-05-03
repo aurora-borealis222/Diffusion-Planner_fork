@@ -168,6 +168,9 @@ def validate_epoch(
 
         inputs = args.observation_normalizer(inputs)
 
+        print("After norm mean:", inputs["ego_current_state"].mean().item())
+        print("After norm std:", inputs["ego_current_state"].std().item())
+
         # --------------------------------------------------
         # INFERENCE
         # --------------------------------------------------

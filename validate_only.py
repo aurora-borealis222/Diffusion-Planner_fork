@@ -12,10 +12,16 @@ from train_predictor import get_args
 
 from diffusion_planner.utils import ddp
 from diffusion_planner.utils.lr_schedule import CosineAnnealingWarmUpRestarts
+from diffusion_planner.utils.normalizer import ObservationNormalizer, StateNormalizer
 
 
 def main():
     args = get_args()
+
+    args.state_normalizer = StateNormalizer.from_json(args)
+    args.observation_normalizer = ObservationNormalizer.from_json(args)
+
+    print("Normalizer keys:", args.observation_normalizer._normalization_dict.keys())
 
     # ------------------------
     # MODEL
