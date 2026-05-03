@@ -166,10 +166,12 @@ def validate_epoch(
             dim=-1,
         )
 
+        # print("BEFORE norm mean:", inputs["ego_current_state"].mean().item())
+
         inputs = args.observation_normalizer(inputs)
 
-        print("After norm mean:", inputs["ego_current_state"].mean().item())
-        print("After norm std:", inputs["ego_current_state"].std().item())
+        # print("After norm mean:", inputs["ego_current_state"].mean().item())
+        # print("After norm std:", inputs["ego_current_state"].std().item())
 
         # --------------------------------------------------
         # INFERENCE
@@ -180,22 +182,22 @@ def validate_epoch(
 
 
         # === DEBUG SCALE CHECK ===
-        gt_all_debug = torch.cat([ego_future[:, None], neighbors_future], dim=1)
-
-        print("PRED mean:", pred_all[..., :2].mean().item())
-        print("GT mean:", gt_all_debug[..., :2].mean().item())
-
-        print("PRED std:", pred_all[..., :2].std().item())
-        print("GT std:", gt_all_debug[..., :2].std().item())
+        # gt_all_debug = torch.cat([ego_future[:, None], neighbors_future], dim=1)
+        #
+        # print("PRED mean:", pred_all[..., :2].mean().item())
+        # print("GT mean:", gt_all_debug[..., :2].mean().item())
+        #
+        # print("PRED std:", pred_all[..., :2].std().item())
+        # print("GT std:", gt_all_debug[..., :2].std().item())
 
         # === NORMALIZER CHECK ===
         normed_inputs = args.observation_normalizer(inputs)
 
-        print("Input diff after renorm:",
-              (normed_inputs["ego_current_state"] - inputs["ego_current_state"]).abs().mean().item())
-
-        print("Input ego mean:", inputs["ego_current_state"].mean().item())
-        print("Input ego std:", inputs["ego_current_state"].std().item())
+        # print("Input diff after renorm:",
+        #       (normed_inputs["ego_current_state"] - inputs["ego_current_state"]).abs().mean().item())
+        #
+        # print("Input ego mean:", inputs["ego_current_state"].mean().item())
+        # print("Input ego std:", inputs["ego_current_state"].std().item())
 
 
         pred_ego = pred_all[:, 0]

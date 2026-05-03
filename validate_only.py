@@ -21,7 +21,7 @@ def main():
     args.state_normalizer = StateNormalizer.from_json(args)
     args.observation_normalizer = ObservationNormalizer.from_json(args)
 
-    print("Normalizer keys:", args.observation_normalizer._normalization_dict.keys())
+    # print("Normalizer keys:", args.observation_normalizer._normalization_dict.keys())
 
     # ------------------------
     # MODEL
