@@ -57,7 +57,7 @@ def main():
     print(f"Model loaded from {args.resume_model_path}")
 
     # 👉 используем EMA если есть
-    # model = model_ema.ema if model_ema is not None else model
+    model = model_ema.ema if model_ema is not None else model
     model.eval()
 
     # ------------------------

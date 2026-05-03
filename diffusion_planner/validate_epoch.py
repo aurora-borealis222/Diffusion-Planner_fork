@@ -223,8 +223,8 @@ def validate_epoch(
         batch_swarm_fde = compute_swarm_fde(pred_all, gt_all, full_mask)
 
         # === DEBUG ===
-        print("ego ADE:", batch_ade.mean().item())
-        print("swarm ADE:", batch_swarm_ade.mean().item())
+        # print("ego ADE:", batch_ade.mean().item())
+        # print("swarm ADE:", batch_swarm_ade.mean().item())
 
         # --------------------------------------------------
         # SAVE
