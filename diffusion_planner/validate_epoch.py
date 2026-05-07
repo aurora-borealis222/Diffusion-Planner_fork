@@ -205,7 +205,7 @@ def validate_epoch(
 
         # GT
         gt_all = torch.cat([ego_future[:, None], neighbors_future], dim=1)
-        gt_all = args.state_normalizer(gt_all)
+        # gt_all = args.state_normalizer(gt_all)
 
         # mask
         ego_mask = torch.zeros_like(ego_future[..., 0], dtype=torch.bool)  # ego всегда валиден
