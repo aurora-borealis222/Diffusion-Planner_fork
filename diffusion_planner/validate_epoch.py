@@ -182,13 +182,13 @@ def validate_epoch(
 
 
         # === DEBUG SCALE CHECK ===
-        # gt_all_debug = torch.cat([ego_future[:, None], neighbors_future], dim=1)
-        #
-        # print("PRED mean:", pred_all[..., :2].mean().item())
-        # print("GT mean:", gt_all_debug[..., :2].mean().item())
-        #
-        # print("PRED std:", pred_all[..., :2].std().item())
-        # print("GT std:", gt_all_debug[..., :2].std().item())
+        gt_all_debug = torch.cat([ego_future[:, None], neighbors_future], dim=1)
+
+        print("PRED mean:", pred_all[..., :2].mean().item())
+        print("GT mean:", gt_all_debug[..., :2].mean().item())
+
+        print("PRED std:", pred_all[..., :2].std().item())
+        print("GT std:", gt_all_debug[..., :2].std().item())
 
         # === NORMALIZER CHECK ===
         normed_inputs = args.observation_normalizer(inputs)
@@ -223,10 +223,10 @@ def validate_epoch(
         batch_swarm_ade = compute_swarm_ade(pred_all, gt_all, full_mask)
         batch_swarm_fde = compute_swarm_fde(pred_all, gt_all, full_mask)
 
-        # scene_scale = gt_all[..., :2].abs().mean()
-        # rel_ade = batch_swarm_ade.mean() / scene_scale
-        # print("Scene scale:", scene_scale.item())
-        # print("Relative ADE:", rel_ade.item())
+        scene_scale = gt_all[..., :2].abs().mean()
+        rel_ade = batch_swarm_ade.mean() / scene_scale
+        print("Scene scale:", scene_scale.item())
+        print("Relative ADE:", rel_ade.item())
 
         # === DEBUG ===
         # print("ego ADE:", batch_ade.mean().item())
