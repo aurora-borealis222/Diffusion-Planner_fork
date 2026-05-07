@@ -161,7 +161,7 @@ def validate_epoch(
         inputs["neighbor_agents_past"] = torch.cat(
             [
                 nbr[..., :2],
-                torch.stack([nbr[..., 2].cos(), nbr[..., 2].sin()], dim=-1),
+                torch.stack([nbr[..., 4].cos(), nbr[..., 4].sin()], dim=-1),
             ],
             dim=-1,
         )
@@ -222,10 +222,10 @@ def validate_epoch(
         batch_swarm_ade = compute_swarm_ade(pred_all, gt_all, full_mask)
         batch_swarm_fde = compute_swarm_fde(pred_all, gt_all, full_mask)
 
-        scene_scale = gt_all[..., :2].abs().mean()
-        rel_ade = batch_swarm_ade.mean() / scene_scale
-        print("Scene scale:", scene_scale.item())
-        print("Relative ADE:", rel_ade.item())
+        # scene_scale = gt_all[..., :2].abs().mean()
+        # rel_ade = batch_swarm_ade.mean() / scene_scale
+        # print("Scene scale:", scene_scale.item())
+        # print("Relative ADE:", rel_ade.item())
 
         # === DEBUG ===
         # print("ego ADE:", batch_ade.mean().item())
