@@ -213,24 +213,24 @@ class SwarmDataProcessor:
             ego_id, t, trajectories, agent_ids
         )
 
-        MAX_RADIUS = 50.0  # можно 50–80
-
-        ego_xy = ego_current_state[:2]
-
-        for i in range(neighbors_past.shape[0]):
-            if np.all(neighbors_past[i] == 0):
-                continue
-
-            # расстояние до ego (по всем таймстепам)
-            dist = np.linalg.norm(
-                neighbors_past[i, :, :2] - ego_xy,
-                axis=1
-            )
-
-            # если ВСЕ точки далеко — выкидываем агента
-            if dist.min() > MAX_RADIUS:
-                neighbors_past[i] = 0
-                neighbors_future[i] = 0
+        # MAX_RADIUS = 50.0  # можно 50–80
+        #
+        # ego_xy = ego_current_state[:2]
+        #
+        # for i in range(neighbors_past.shape[0]):
+        #     if np.all(neighbors_past[i] == 0):
+        #         continue
+        #
+        #     # расстояние до ego (по всем таймстепам)
+        #     dist = np.linalg.norm(
+        #         neighbors_past[i, :, :2] - ego_xy,
+        #         axis=1
+        #     )
+        #
+        #     # если ВСЕ точки далеко — выкидываем агента
+        #     if dist.min() > MAX_RADIUS:
+        #         neighbors_past[i] = 0
+        #         neighbors_future[i] = 0
 
         # print("\n=== RAW CHECK ===")
         #

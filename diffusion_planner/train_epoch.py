@@ -97,7 +97,25 @@ def train_epoch(data_loader, model, optimizer, args, ema, aug: StatePerturbation
             )
 
             # neighbors current (all past steps)
-            inputs["neighbor_agents_past"] = inputs["neighbor_agents_past"][..., :4]
+            # inputs["neighbor_agents_past"] = inputs["neighbor_agents_past"][..., :4]
+            neighbors = inputs["neighbor_agents_past"]
+
+            inputs["neighbor_agents_past"] = torch.cat(
+                [
+                    neighbors[..., :2],  # x,y
+
+                    torch.stack(
+                        [
+                            neighbors[..., 4].cos(),
+                            neighbors[..., 4].sin(),
+                        ],
+                        dim=-1
+                    ),
+
+                    neighbors[..., 2:4],  # vx, vy
+                ],
+                dim=-1
+            )
 
             # for k, v in inputs.items():
             #     print(k, v.shape)

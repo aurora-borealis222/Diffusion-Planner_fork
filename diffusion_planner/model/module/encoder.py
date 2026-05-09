@@ -94,7 +94,7 @@ class AgentFusionEncoder(nn.Module):
 
         # self.type_emb = nn.Linear(3, channels_mlp_dim)
 
-        self.channel_pre_project = Mlp(in_features=4+1, hidden_features=channels_mlp_dim, out_features=channels_mlp_dim, act_layer=nn.GELU, drop=0.)
+        self.channel_pre_project = Mlp(in_features=6+1, hidden_features=channels_mlp_dim, out_features=channels_mlp_dim, act_layer=nn.GELU, drop=0.)
         self.token_pre_project = Mlp(in_features=time_len, hidden_features=tokens_mlp_dim, out_features=tokens_mlp_dim, act_layer=nn.GELU, drop=0.)
 
         self.blocks = nn.ModuleList([MixerBlock(tokens_mlp_dim, channels_mlp_dim, drop_path_rate) for i in range(depth)])
@@ -105,37 +105,37 @@ class AgentFusionEncoder(nn.Module):
 
     def forward(self, x):
         """
-        x: B, P, V, 4  (x, y, cos, sin)
+        x: B, P, V, 6
+        (x, y, cos, sin, vx, vy)
         """
-        # x: B, P, V, D
-        # print("Agent input:", x.shape)
 
         B, P, V, D = x.shape
-        assert D == 4, f"Expected 4 features, got {D}"
+        assert D == 6
 
-        # === position embedding ===
-        pos = x[:, :, -1, :]  # B, P, 4
+        # position embedding
         # pos = torch.zeros((B, P, 7), device=x.device)
-        # pos[..., :4] = x[:, :, -1, :]  # x, y, cos, sin
-        # pos[..., -3] = 1.0  # agent type
 
-        # === valid mask (VERY IMPORTANT) ===
-        # print("Before mask, x:", x.shape)
-        mask_v = torch.sum(torch.ne(x, 0), dim=-1) == 0  # B,P,V
-        # print("mask_v:", mask_v.shape)
+        pos[..., :4] = x[:, :, -1, :4]
 
-        mask_p = torch.sum(~mask_v, dim=-1) == 0  # B,P
+        # agent type
+        # pos[..., -3] = 1.0
+
+        # valid mask
+        mask_v = torch.sum(torch.ne(x, 0), dim=-1) == 0
+        mask_p = torch.sum(~mask_v, dim=-1) == 0
 
         # add validity channel
-        x = torch.cat([x, (~mask_v).float().unsqueeze(-1)], dim=-1)
-        # print("After cat, x:", x.shape)
-        # x: B,P,V,5
+        x = torch.cat(
+            [x, (~mask_v).float().unsqueeze(-1)],
+            dim=-1
+        )
 
-        x = x.view(B * P, V, 5)
+        # -> [B*P, V, 7]
+        x = x.view(B * P, V, 7)
+
         valid_indices = ~mask_p.view(-1)
         x = x[valid_indices]
 
-        # === MLP Mixer ===
         x = self.channel_pre_project(x)
         x = x.permute(0, 2, 1)
         x = self.token_pre_project(x)
@@ -147,11 +147,61 @@ class AgentFusionEncoder(nn.Module):
         x = x.mean(dim=1)
         x = self.emb_project(self.norm(x))
 
-        # restore shape
         out = torch.zeros((B * P, x.shape[-1]), device=x.device)
         out[valid_indices] = x
 
         return out.view(B, P, -1), mask_p, pos
+
+
+    # def forward(self, x):
+    #     """
+    #     x: B, P, V, 4  (x, y, cos, sin)
+    #     """
+    #     # x: B, P, V, D
+    #     # print("Agent input:", x.shape)
+    #
+    #     B, P, V, D = x.shape
+    #     assert D == 4, f"Expected 4 features, got {D}"
+    #
+    #     # === position embedding ===
+    #     pos = x[:, :, -1, :]  # B, P, 4
+    #     # pos = torch.zeros((B, P, 7), device=x.device)
+    #     # pos[..., :4] = x[:, :, -1, :]  # x, y, cos, sin
+    #     # pos[..., -3] = 1.0  # agent type
+    #
+    #     # === valid mask (VERY IMPORTANT) ===
+    #     # print("Before mask, x:", x.shape)
+    #     mask_v = torch.sum(torch.ne(x, 0), dim=-1) == 0  # B,P,V
+    #     # print("mask_v:", mask_v.shape)
+    #
+    #     mask_p = torch.sum(~mask_v, dim=-1) == 0  # B,P
+    #
+    #     # add validity channel
+    #     x = torch.cat([x, (~mask_v).float().unsqueeze(-1)], dim=-1)
+    #     # print("After cat, x:", x.shape)
+    #     # x: B,P,V,5
+    #
+    #     x = x.view(B * P, V, 5)
+    #     valid_indices = ~mask_p.view(-1)
+    #     x = x[valid_indices]
+    #
+    #     # === MLP Mixer ===
+    #     x = self.channel_pre_project(x)
+    #     x = x.permute(0, 2, 1)
+    #     x = self.token_pre_project(x)
+    #     x = x.permute(0, 2, 1)
+    #
+    #     for block in self.blocks:
+    #         x = block(x)
+    #
+    #     x = x.mean(dim=1)
+    #     x = self.emb_project(self.norm(x))
+    #
+    #     # restore shape
+    #     out = torch.zeros((B * P, x.shape[-1]), device=x.device)
+    #     out[valid_indices] = x
+    #
+    #     return out.view(B, P, -1), mask_p, pos
 
     # def forward(self, x):
     #     '''

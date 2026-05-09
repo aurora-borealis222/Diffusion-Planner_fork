@@ -157,7 +157,48 @@ def validate_epoch(
             dim=-1,
         )
 
-        inputs["neighbor_agents_past"] = inputs["neighbor_agents_past"][..., :4]
+        # inputs["neighbor_agents_past"] = inputs["neighbor_agents_past"][..., :4]
+        neighbors = inputs["neighbor_agents_past"]
+
+        inputs["neighbor_agents_past"] = torch.cat(
+            [
+                neighbors[..., :2],  # x,y
+
+                torch.stack(
+                    [
+                        neighbors[..., 4].cos(),
+                        neighbors[..., 4].sin(),
+                    ],
+                    dim=-1
+                ),
+
+                neighbors[..., 2:4],  # vx, vy
+            ],
+            dim=-1
+        )
+
+        vx = inputs["neighbor_agents_past"][..., 4]
+        vy = inputs["neighbor_agents_past"][..., 5]
+
+        valid_mask = torch.sum(
+            torch.ne(inputs["neighbor_agents_past"], 0),
+            dim=-1
+        ) > 0
+
+        vx_valid = vx[valid_mask]
+        vy_valid = vy[valid_mask]
+
+        print("VX mean:", vx_valid.mean().item())
+        print("VX std:", vx_valid.std().item())
+
+        print("VY mean:", vy_valid.mean().item())
+        print("VY std:", vy_valid.std().item())
+
+        speed = torch.sqrt(vx_valid ** 2 + vy_valid ** 2)
+
+        print("Speed mean:", speed.mean().item())
+        print("Speed std:", speed.std().item())
+        print("Speed max:", speed.max().item())
 
         # print("BEFORE norm mean:", inputs["ego_current_state"].mean().item())
 
@@ -184,7 +225,7 @@ def validate_epoch(
         # print("GT std:", gt_all_debug[..., :2].std().item())
 
         # === NORMALIZER CHECK ===
-        normed_inputs = args.observation_normalizer(inputs)
+        # normed_inputs = args.observation_normalizer(inputs)
 
         # print("Input diff after renorm:",
         #       (normed_inputs["ego_current_state"] - inputs["ego_current_state"]).abs().mean().item())
@@ -198,7 +239,7 @@ def validate_epoch(
 
         # GT
         gt_all = torch.cat([ego_future[:, None], neighbors_future], dim=1)
-        gt_all = args.state_normalizer(gt_all)
+        # gt_all = args.state_normalizer(gt_all)
 
         # mask
         ego_mask = torch.zeros_like(ego_future[..., 0], dtype=torch.bool)  # ego всегда валиден
