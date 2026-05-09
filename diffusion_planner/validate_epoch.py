@@ -157,14 +157,7 @@ def validate_epoch(
             dim=-1,
         )
 
-        nbr = inputs["neighbor_agents_past"]
-        inputs["neighbor_agents_past"] = torch.cat(
-            [
-                nbr[..., :2],
-                torch.stack([nbr[..., 4].cos(), nbr[..., 4].sin()], dim=-1),
-            ],
-            dim=-1,
-        )
+        inputs["neighbor_agents_past"] = inputs["neighbor_agents_past"][..., :4]
 
         # print("BEFORE norm mean:", inputs["ego_current_state"].mean().item())
 

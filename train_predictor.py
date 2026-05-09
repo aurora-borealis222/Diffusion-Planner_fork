@@ -18,6 +18,7 @@ from diffusion_planner.utils.normalizer import ObservationNormalizer, StateNorma
 from diffusion_planner.utils.lr_schedule import CosineAnnealingWarmUpRestarts
 from diffusion_planner.utils.tb_log import TensorBoardLogger as Logger
 from diffusion_planner.utils.data_augmentation import StatePerturbation
+from diffusion_planner.utils.swarm_data_augmentation import SwarmStatePerturbation
 from diffusion_planner.utils import ddp
 
 from diffusion_planner.train_epoch import train_epoch
@@ -56,7 +57,7 @@ def get_args():
     parser.add_argument('--time_len', type=int, help='number of time point', default=21)
 
     parser.add_argument('--agent_state_dim', type=int, help='past state dim for agents', default=11)
-    parser.add_argument('--agent_num', type=int, help='number of agents', default=32)
+    parser.add_argument('--agent_num', type=int, help='number of agents', default=16)
 
     parser.add_argument('--static_objects_state_dim', type=int, help='state dim for static objects', default=10)
     parser.add_argument('--static_objects_num', type=int, help='number of static objects', default=5)
@@ -72,7 +73,7 @@ def get_args():
     # DataLoader parameters
     parser.add_argument('--augment_prob', type=float, help='augmentation probability', default=0.5)
     parser.add_argument('--normalization_file_path', default='normalization.json', help='filepath of normalizaiton.json', type=str)
-    parser.add_argument('--use_data_augment', default=False, type=boolean)
+    parser.add_argument('--use_data_augment', default=True, type=boolean)
     parser.add_argument('--num_workers', default=16, type=int)
     parser.add_argument('--pin-mem', action='store_true', help='Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.')
     parser.add_argument('--no-pin-mem', action='store_false', dest='pin_mem', help='')
@@ -102,7 +103,7 @@ def get_args():
     parser.add_argument('--diffusion_model_type', type=str, help='type of diffusion model [x_start, score]', choices=['score', 'x_start'], default='x_start')
 
     # decoder
-    parser.add_argument('--predicted_neighbor_num', type=int, help='number of neighbor agents to predict', default=10)
+    parser.add_argument('--predicted_neighbor_num', type=int, help='number of neighbor agents to predict', default=16)
     parser.add_argument('--resume_model_path', type=str, help='path to resume model', default=None)
 
     parser.add_argument('--use_wandb', default=False, type=boolean)
@@ -161,7 +162,8 @@ def model_training(args):
     batch_size = args.batch_size
     
     # set up data loaders
-    aug = StatePerturbation(augment_prob=args.augment_prob, device=args.device) if args.use_data_augment else None
+    # aug = StatePerturbation(augment_prob=args.augment_prob, device=args.device) if args.use_data_augment else None
+    aug = SwarmStatePerturbation(augment_prob=args.augment_prob, device=args.device) if args.use_data_augment else None
     # train_set = DiffusionPlannerData(args.train_set, args.train_set_list, args.agent_num, args.predicted_neighbor_num, args.future_len)
     # train_set = SwarmDataset(
     #     data_dir=args.train_set,

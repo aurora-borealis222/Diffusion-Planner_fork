@@ -191,12 +191,6 @@ class SwarmDataProcessor:
         return np.stack([x_new, y_new, vx_new, vy_new, heading_new], axis=-1)
 
 
-    def normalize(self, data, scale=20.0):
-        data[..., 0] /= scale  # x
-        data[..., 1] /= scale  # y
-        data[..., 2] /= scale  # vx
-        data[..., 3] /= scale  # vy
-        return data
     # ============================================================
     # Step 3: build one training sample
     # ============================================================
@@ -254,7 +248,7 @@ class SwarmDataProcessor:
         # print("  min:", dist.min())
 
         # anchor = ego_future[0].copy()
-        ego_future = self.to_ego_frame_xyh(ego_future, ego_current_state)
+        # ego_future = self.to_ego_frame_xyh(ego_future, ego_current_state)
 
         # print("ego at origin check (first step):", ego_future[0])
         #
@@ -267,10 +261,10 @@ class SwarmDataProcessor:
         # for i in range(neighbors_past.shape[0]):
         #     neighbors_past[i] = self.to_ego_frame_full(neighbors_past[i], ego_current_state)
 
-        for i in range(neighbors_past.shape[0]):
-            if np.all(neighbors_past[i] == 0):
-                continue
-            neighbors_past[i] = self.to_ego_frame_full(neighbors_past[i], ego_current_state)
+        # for i in range(neighbors_past.shape[0]):
+        #     if np.all(neighbors_past[i] == 0):
+        #         continue
+        #     neighbors_past[i] = self.to_ego_frame_full(neighbors_past[i], ego_current_state)
 
         # print("neighbors sample PAST:", neighbors_past[0, 0, :2])
 
@@ -283,10 +277,10 @@ class SwarmDataProcessor:
         # print("max abs neighbors past:", np.abs(neighbors_past[..., :2]).max())
         # print("mean x neighbors past:", neighbors_past[..., 0].mean())
 
-        for i in range(neighbors_future.shape[0]):
-            if np.all(neighbors_future[i] == 0):
-                continue
-            neighbors_future[i] = self.to_ego_frame_full(neighbors_future[i], ego_current_state)
+        # for i in range(neighbors_future.shape[0]):
+        #     if np.all(neighbors_future[i] == 0):
+        #         continue
+        #     neighbors_future[i] = self.to_ego_frame_xyh(neighbors_future[i], ego_current_state)
 
         # print("neighbors sample FUTURE:", neighbors_future[0, 0, :2])
 
@@ -372,27 +366,72 @@ class SwarmDataProcessor:
     # Neighbor helpers
     # ============================================================
     def _neighbors(self, ego_id, t, trajectories, agent_ids):
-        D = 5  # x, y, vx, vy, heading
+        D_past = 5
+        D_future = 3
 
         neighbors_past = np.zeros(
-            (self.agent_num, self.history_len, D), dtype=np.float32
-        )
-        neighbors_future = np.zeros(
-            (self.agent_num, self.future_len, D), dtype=np.float32
+            (self.agent_num, self.history_len, D_past),
+            dtype=np.float32
         )
 
-        k = 0
+        neighbors_future = np.zeros(
+            (self.agent_num, self.future_len, D_future),
+            dtype=np.float32
+        )
+
+        ego_pos = trajectories[ego_id][t]["pos"]
+
+        candidates = []
+
+        # =========================================================
+        # collect valid neighbors
+        # =========================================================
+
+        MAX_RADIUS = 30.0
+
         for aid in agent_ids:
+
             if aid == ego_id:
                 continue
 
             traj = trajectories[aid]
 
-            if t < self.history_len or t + self.future_len >= len(traj):
+            # trajectory too short
+            if t < self.history_len:
                 continue
 
-            past = traj[t - self.history_len: t]
-            future = traj[t + 1: t + 1 + self.future_len]
+            if t + self.future_len >= len(traj):
+                continue
+
+            # distance at current timestep
+            neighbor_pos = traj[t]["pos"]
+
+            dist = np.linalg.norm(neighbor_pos - ego_pos)
+
+            if dist < MAX_RADIUS:
+                candidates.append((dist, aid))
+
+        # =========================================================
+        # sort by distance
+        # =========================================================
+
+        candidates.sort(key=lambda x: x[0])
+
+        # =========================================================
+        # take nearest K
+        # =========================================================
+
+        nearest = candidates[:self.agent_num]
+
+        # =========================================================
+        # fill tensors
+        # =========================================================
+
+        for k, (_, aid) in enumerate(nearest):
+            traj = trajectories[aid]
+
+            past = traj[t - self.history_len:t]
+            future = traj[t + 1:t + 1 + self.future_len]
 
             neighbors_past[k] = np.array([
                 [
@@ -405,22 +444,14 @@ class SwarmDataProcessor:
                 for s in past
             ], dtype=np.float32)
 
-            neighbors_future[k] = np.array(
+            neighbors_future[k] = np.array([
                 [
-                    [
-                        s["pos"][0],
-                        s["pos"][1],
-                        s["vel"][0],
-                        s["vel"][1],
-                        np.deg2rad(s["heading"])
-                     ] for s in future
-                ],
-                dtype=np.float32
-            )
-
-            k += 1
-            if k >= self.agent_num:
-                break
+                    s["pos"][0],
+                    s["pos"][1],
+                    np.deg2rad(s["heading"]),
+                ]
+                for s in future
+            ], dtype=np.float32)
 
         return neighbors_past, neighbors_future
 
