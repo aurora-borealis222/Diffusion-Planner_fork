@@ -175,13 +175,13 @@ def validate_epoch(
 
 
         # === DEBUG SCALE CHECK ===
-        gt_all_debug = torch.cat([ego_future[:, None], neighbors_future], dim=1)
-
-        print("PRED mean:", pred_all[..., :2].mean().item())
-        print("GT mean:", gt_all_debug[..., :2].mean().item())
-
-        print("PRED std:", pred_all[..., :2].std().item())
-        print("GT std:", gt_all_debug[..., :2].std().item())
+        # gt_all_debug = torch.cat([ego_future[:, None], neighbors_future], dim=1)
+        #
+        # print("PRED mean:", pred_all[..., :2].mean().item())
+        # print("GT mean:", gt_all_debug[..., :2].mean().item())
+        #
+        # print("PRED std:", pred_all[..., :2].std().item())
+        # print("GT std:", gt_all_debug[..., :2].std().item())
 
         # === NORMALIZER CHECK ===
         normed_inputs = args.observation_normalizer(inputs)
@@ -198,7 +198,7 @@ def validate_epoch(
 
         # GT
         gt_all = torch.cat([ego_future[:, None], neighbors_future], dim=1)
-        # gt_all = args.state_normalizer(gt_all)
+        gt_all = args.state_normalizer(gt_all)
 
         # mask
         ego_mask = torch.zeros_like(ego_future[..., 0], dtype=torch.bool)  # ego всегда валиден
