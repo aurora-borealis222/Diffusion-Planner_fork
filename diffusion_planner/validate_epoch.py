@@ -69,6 +69,11 @@ def validate_epoch(
     exp_metrics = defaultdict(list)
     used_experiments = set()
 
+    val_transform = SwarmStatePerturbation(
+        augment_prob=0.0,
+        device=args.device
+    )
+
     for batch in tqdm(data_loader, desc="Validation"):
         *data, exp_idx = batch
         exp_idx = exp_idx.numpy()
@@ -115,6 +120,12 @@ def validate_epoch(
 
         ego_future = data[1].to(args.device)
         neighbors_future = data[3].to(args.device)
+
+        inputs, ego_future, neighbors_future = val_transform.centric_transform(
+            inputs,
+            ego_future,
+            neighbors_future
+        )
 
         neighbor_future_mask = torch.sum(
             torch.ne(neighbors_future[..., :3], 0),

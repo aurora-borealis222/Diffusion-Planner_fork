@@ -272,6 +272,9 @@ def model_training(args):
             )
 
             print(f"[Quick Val] ADE={val_metrics['ADE']:.4f}")
+            print(f"[Quick Val] FDE={val_metrics['FDE']:.4f}")
+            print(f"[Quick Val] Swarm ADE={val_metrics['SWARM_ADE']:.4f}")
+            print(f"[Quick Val] Swarm FDE={val_metrics['SWARM_FDE']:.4f}")
 
             metrics_path = os.path.join(save_path, "val_metrics_quick.csv")
 
@@ -300,6 +303,9 @@ def model_training(args):
                 )
 
                 print(f"[FULL Val] ADE={val_metrics['ADE']:.4f}")
+                print(f"[FULL Val] FDE={val_metrics['FDE']:.4f}")
+                print(f"[FULL Val] Swarm ADE={val_metrics['SWARM_ADE']:.4f}")
+                print(f"[FULL Val] Swarm FDE={val_metrics['SWARM_FDE']:.4f}")
 
                 metrics_path = os.path.join(save_path, "val_metrics_full.csv")
 

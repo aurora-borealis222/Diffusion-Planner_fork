@@ -34,9 +34,7 @@ def main():
 
     optimizer = optim.AdamW(params)
 
-    train_epochs = 1
-    warm_up_epoch = 0
-    scheduler = CosineAnnealingWarmUpRestarts(optimizer, train_epochs, warm_up_epoch)
+    scheduler = CosineAnnealingWarmUpRestarts(optimizer, args.train_epochs, args.warm_up_epoch)
 
     model_ema = ModelEma(model, decay=0.999, device=args.device)
 
@@ -91,7 +89,10 @@ def main():
         max_experiments=args.quick_val_experiments
     )
 
-    print(f"[Quick Val] ADE={metrics['ADE']:.4f}")
+    print(f"[Val] ADE={metrics['ADE']:.4f}")
+    print(f"[Val] FDE={metrics['FDE']:.4f}")
+    print(f"[Val] Swarm ADE={metrics['SWARM_ADE']:.4f}")
+    print(f"[Val] Swarm FDE={metrics['SWARM_FDE']:.4f}")
 
     print("\n===== VALIDATION RESULTS =====")
     for k, v in metrics.items():
