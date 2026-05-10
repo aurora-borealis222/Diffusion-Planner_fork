@@ -4,7 +4,7 @@
 # User Configuration Section
 ###################################
 DATA_ARCHIVE_PATH="$HOME/stadium_main_300.zip"
-SAVE_PATH="$HOME/swarm_data"
+SAVE_PATH="$HOME/swarm_data_fixed"
 ###################################
 
 python swarm_data_process.py \

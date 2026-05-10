@@ -4,6 +4,8 @@ import torch
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
 
+import pandas as pd
+
 import argparse
 from torch import optim
 from timm.utils import ModelEma
@@ -242,6 +244,11 @@ def model_training(args):
 
     best_ade = float("inf")
 
+    val_history = {
+        "epoch": [],
+        "ADE": [],
+    }
+
     # begin training
     for epoch in range(init_epoch, train_epochs):
         if global_rank == 0:
@@ -266,6 +273,20 @@ def model_training(args):
 
             print(f"[Quick Val] ADE={val_metrics['ADE']:.4f}")
 
+            metrics_path = os.path.join(save_path, "val_metrics_quick.csv")
+
+            row = {
+                "epoch": epoch,
+                **val_metrics
+            }
+
+            df = pd.DataFrame([row])
+
+            if not os.path.exists(metrics_path):
+                df.to_csv(metrics_path, index=False)
+            else:
+                df.to_csv(metrics_path, mode="a", header=False, index=False)
+
             # -------------------------
             # FULL VALIDATION
             # -------------------------
@@ -279,6 +300,20 @@ def model_training(args):
                 )
 
                 print(f"[FULL Val] ADE={val_metrics['ADE']:.4f}")
+
+                metrics_path = os.path.join(save_path, "val_metrics_full.csv")
+
+                row = {
+                    "epoch": epoch,
+                    **val_metrics
+                }
+
+                df = pd.DataFrame([row])
+
+                if not os.path.exists(metrics_path):
+                    df.to_csv(metrics_path, index=False)
+                else:
+                    df.to_csv(metrics_path, mode="a", header=False, index=False)
 
                 # save best
                 if val_metrics["ADE"] < best_ade:

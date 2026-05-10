@@ -177,28 +177,28 @@ def validate_epoch(
             dim=-1
         )
 
-        vx = inputs["neighbor_agents_past"][..., 4]
-        vy = inputs["neighbor_agents_past"][..., 5]
-
-        valid_mask = torch.sum(
-            torch.ne(inputs["neighbor_agents_past"], 0),
-            dim=-1
-        ) > 0
-
-        vx_valid = vx[valid_mask]
-        vy_valid = vy[valid_mask]
-
-        print("VX mean:", vx_valid.mean().item())
-        print("VX std:", vx_valid.std().item())
-
-        print("VY mean:", vy_valid.mean().item())
-        print("VY std:", vy_valid.std().item())
-
-        speed = torch.sqrt(vx_valid ** 2 + vy_valid ** 2)
-
-        print("Speed mean:", speed.mean().item())
-        print("Speed std:", speed.std().item())
-        print("Speed max:", speed.max().item())
+        # vx = inputs["neighbor_agents_past"][..., 4]
+        # vy = inputs["neighbor_agents_past"][..., 5]
+        #
+        # valid_mask = torch.sum(
+        #     torch.ne(inputs["neighbor_agents_past"], 0),
+        #     dim=-1
+        # ) > 0
+        #
+        # vx_valid = vx[valid_mask]
+        # vy_valid = vy[valid_mask]
+        #
+        # print("VX mean:", vx_valid.mean().item())
+        # print("VX std:", vx_valid.std().item())
+        #
+        # print("VY mean:", vy_valid.mean().item())
+        # print("VY std:", vy_valid.std().item())
+        #
+        # speed = torch.sqrt(vx_valid ** 2 + vy_valid ** 2)
+        #
+        # print("Speed mean:", speed.mean().item())
+        # print("Speed std:", speed.std().item())
+        # print("Speed max:", speed.max().item())
 
         # print("BEFORE norm mean:", inputs["ego_current_state"].mean().item())
 

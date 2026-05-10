@@ -115,7 +115,7 @@ class AgentFusionEncoder(nn.Module):
         # position embedding
         # pos = torch.zeros((B, P, 7), device=x.device)
 
-        pos[..., :4] = x[:, :, -1, :4]
+        pos = x[:, :, -1, :4]
 
         # agent type
         # pos[..., -3] = 1.0

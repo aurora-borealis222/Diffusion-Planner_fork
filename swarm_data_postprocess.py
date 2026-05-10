@@ -2,8 +2,8 @@ import os
 import numpy as np
 from tqdm import tqdm
 
-SRC_DIR = "/home/tatyana/swarm_data"
-DST_DIR = "/home/tatyana/swarm_data_npy_new"
+SRC_DIR = "/home/tatyana/swarm_data_fixed"
+DST_DIR = "/home/tatyana/swarm_data_fixed_npy"
 
 os.makedirs(DST_DIR, exist_ok=True)
 

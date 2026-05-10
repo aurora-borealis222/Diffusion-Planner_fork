@@ -381,48 +381,49 @@ class SwarmDataProcessor:
 
         ego_pos = trajectories[ego_id][t]["pos"]
 
-        candidates = []
+        # dists = []
+        #
+        # for aid in agent_ids:
+        #     if aid == ego_id:
+        #         continue
+        #
+        #     dist = np.linalg.norm(
+        #         trajectories[aid][t]["pos"] - ego_pos
+        #     )
+        #     dists.append(dist)
+        #
+        # print(np.percentile(dists, [10, 50, 90]))
 
         # =========================================================
         # collect valid neighbors
         # =========================================================
 
-        MAX_RADIUS = 30.0
+        # MAX_RADIUS = 1000.0
+
+        # 1. collect all valid agents
+        candidates = []
 
         for aid in agent_ids:
-
             if aid == ego_id:
                 continue
 
             traj = trajectories[aid]
 
-            # trajectory too short
             if t < self.history_len:
                 continue
-
             if t + self.future_len >= len(traj):
                 continue
 
-            # distance at current timestep
-            neighbor_pos = traj[t]["pos"]
+            dist = np.linalg.norm(traj[t]["pos"] - ego_pos)
 
-            dist = np.linalg.norm(neighbor_pos - ego_pos)
+            candidates.append((dist, aid))
 
-            if dist < MAX_RADIUS:
-                candidates.append((dist, aid))
-
-        # =========================================================
-        # sort by distance
-        # =========================================================
-
+        # 2. pure KNN
         candidates.sort(key=lambda x: x[0])
 
-        # =========================================================
-        # take nearest K
-        # =========================================================
-
+        # nearest = [c for c in candidates if c[0] < MAX_RADIUS]
+        # nearest = sorted(nearest)[:self.agent_num]
         nearest = candidates[:self.agent_num]
-
         # =========================================================
         # fill tensors
         # =========================================================
@@ -453,6 +454,9 @@ class SwarmDataProcessor:
                 for s in future
             ], dtype=np.float32)
 
+        # empty_agents = np.sum(np.all(neighbors_past == 0, axis=(1, 2)))
+        # print("[DEBUG] empty slots:", empty_agents)
+
         return neighbors_past, neighbors_future
 
     # ============================================================
@@ -468,9 +472,31 @@ class SwarmDataProcessor:
             for k in keys
         }
 
-        for k in data:
-            if data[k].dtype == np.float32:
-                data[k] = data[k].astype(np.float16)
+        # for k in data:
+        #     arr = data[k]
+
+            # =========================
+            # DEBUG ONLY (до float16)
+            # =========================
+            # if k == "neighbor_agents_past":
+            #     vx = arr[..., 2]
+            #     vy = arr[..., 3]
+            #
+            #     speed = np.sqrt(vx ** 2 + vy ** 2)
+            #
+            #     print(f"\n[{k}] vx sample:", vx.reshape(-1)[:10])
+            #     print(f"[{k}] vy sample:", vy.reshape(-1)[:10])
+            #
+            #     print("\nagent-wise speed mean:")
+            #
+            #     # проверим несколько агентов
+            #     for i in range(min(3, speed.shape[0])):
+            #         print(f"agent {i} mean speed:", speed[i].mean())
+
+            # =========================
+            # convert to float16
+            # =========================
+            # data[k] = arr.astype(np.float16)
 
         np.savez_compressed(path, **data)
         print(f"[Saved] {fname}: {len(samples)} samples")

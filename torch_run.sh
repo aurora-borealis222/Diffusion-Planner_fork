@@ -7,8 +7,8 @@ RUN_PYTHON_PATH="/home/jovyan/.mlspace/envs/env_marl_TatyanaG_1/bin/python" # py
 #RUN_PYTHON_PATH="$HOME/miniconda3/envs/diffusion_planner_swarm/bin/python"
 
 # Set training data path
-TRAIN_SET_PATH="/home/jovyan/AndreiZ/MARL/TatyanaG/swarm_data_npy_new" # preprocess data using #data_process.sh
-#TRAIN_SET_PATH="$HOME/swarm_data_npy_new"
+TRAIN_SET_PATH="/home/jovyan/AndreiZ/MARL/TatyanaG/swarm_data_fixed_npy" # preprocess data using #data_process.sh
+#TRAIN_SET_PATH="$HOME/swarm_data_fixed_npy"
 #TRAIN_SET_LIST_PATH="/home/jovyan/AndreiZ/MARL/TatyanaG/Diffusion-Planner_fork/diffusion_planner_training.json"
 ###################################
 

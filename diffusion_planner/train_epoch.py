@@ -1,14 +1,17 @@
 from tqdm import tqdm
 import torch
 from torch import nn
+import numpy as np
+from datetime import datetime
 
-from diffusion_planner.utils.data_augmentation import StatePerturbation   
+from diffusion_planner.utils.data_augmentation import StatePerturbation
+from diffusion_planner.utils.swarm_data_augmentation import SwarmStatePerturbation
 from diffusion_planner.utils.train_utils import get_epoch_mean_loss
 from diffusion_planner.utils import ddp
 from diffusion_planner.loss import diffusion_loss_func
 
 
-def train_epoch(data_loader, model, optimizer, args, ema, aug: StatePerturbation=None):
+def train_epoch(data_loader, model, optimizer, args, ema, aug: SwarmStatePerturbation=None):
     epoch_loss = []
 
     model.train()
@@ -17,6 +20,12 @@ def train_epoch(data_loader, model, optimizer, args, ema, aug: StatePerturbation
         torch.cuda.synchronize()
 
     with tqdm(data_loader, desc="Training", unit="batch") as data_epoch:
+        history = {
+            "total_loss": [],
+            "ego_loss": [],
+            "neighbor_loss": [],
+        }
+
         for batch in data_epoch:
             '''
             data structure in batch: Tuple(Tensor) 
@@ -117,6 +126,55 @@ def train_epoch(data_loader, model, optimizer, args, ema, aug: StatePerturbation
                 dim=-1
             )
 
+            # vx = neighbors_past[..., 2]
+            # vy = neighbors_past[..., 3]
+            #
+            # speed = torch.sqrt(vx ** 2 + vy ** 2)
+            #
+            # valid = torch.sum(torch.ne(neighbors_past[..., :4], 0), dim=-1) > 0
+            #
+            # speed = speed[valid]
+            #
+            # print(
+            #     "neighbor speed stats:",
+            #     "mean =", speed.mean().item(),
+            #     "std =", speed.std().item(),
+            #     "max =", speed.max().item(),
+            # )
+
+            # print("neighbor_agents_past", inputs["neighbor_agents_past"])
+            # vx = inputs["neighbor_agents_past"][..., 4]
+            # vy = inputs["neighbor_agents_past"][..., 5]
+
+            # print("vx mean", vx.mean())
+            # print("vy mean", vy.mean())
+            #
+            # print("vx std", vx.std())
+            # print("vy std", vy.std())
+
+            # valid_mask = torch.sum(
+            #     torch.ne(inputs["neighbor_agents_past"], 0),
+            #     dim=-1
+            # ) > 0
+
+            # vx_valid = vx[valid_mask]
+            # vy_valid = vy[valid_mask]
+
+            # print("raw vx mean:", neighbors[..., 2].mean())
+            # print("raw vy mean:", neighbors[..., 3].mean())
+
+            # print("VX mean:", vx_valid.mean().item())
+            # print("VX std:", vx_valid.std().item())
+            #
+            # print("VY mean:", vy_valid.mean().item())
+            # print("VY std:", vy_valid.std().item())
+            #
+            # speed = torch.sqrt(vx_valid ** 2 + vy_valid ** 2)
+            #
+            # print("Speed mean:", speed.mean().item())
+            # print("Speed std:", speed.std().item())
+            # print("Speed max:", speed.max().item())
+
             # for k, v in inputs.items():
             #     print(k, v.shape)
 
@@ -154,6 +212,24 @@ def train_epoch(data_loader, model, optimizer, args, ema, aug: StatePerturbation
             
             data_epoch.set_postfix(loss='{:.4f}'.format(total_loss))
             epoch_loss.append(loss)
+
+
+    mean_total = np.mean([x["loss"].item() for x in epoch_loss])
+    mean_ego = np.mean([x["ego_planning_loss"].item() for x in epoch_loss])
+    mean_neighbor = np.mean([x["neighbor_prediction_loss"].item() for x in epoch_loss])
+
+    history["total_loss"].append(mean_total)
+    history["ego_loss"].append(mean_ego)
+    history["neighbor_loss"].append(mean_neighbor)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"training_epoch_{timestamp}.npy"
+
+    np.save(filename, history)
+
+    # print(f"Epoch total loss: {mean_total:.4f}")
+    # print(f"Epoch ego loss: {mean_ego:.4f}")
+    # print(f"Epoch neighbor loss: {mean_neighbor:.4f}")
 
     epoch_mean_loss = get_epoch_mean_loss(epoch_loss)
 
