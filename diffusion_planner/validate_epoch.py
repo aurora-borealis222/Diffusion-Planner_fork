@@ -2,6 +2,8 @@ import torch
 from collections import defaultdict
 from tqdm import tqdm
 
+from diffusion_planner.utils.swarm_data_augmentation import SwarmStatePerturbation
+
 
 # -----------------------------
 # Метрики (per-sample)
