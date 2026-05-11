@@ -1,6 +1,9 @@
 import torch
 from torch.utils.data import DataLoader
 
+import os
+import pandas as pd
+
 from torch import optim
 from diffusion_planner.model.diffusion_planner import Diffusion_Planner
 from diffusion_planner.utils.swarm_dataset import SwarmDataset
@@ -89,14 +92,14 @@ def main():
         max_experiments=args.quick_val_experiments
     )
 
-    print(f"[Val] ADE={val_metrics['ADE']:.4f}")
-    print(f"[Val] FDE={val_metrics['FDE']:.4f}")
-    print(f"[Val] Swarm ADE={val_metrics['SWARM_ADE']:.4f}")
-    print(f"[Val] Swarm FDE={val_metrics['SWARM_FDE']:.4f}")
+    # print(f"[Val] ADE={val_metrics['ADE']:.4f}")
+    # print(f"[Val] FDE={val_metrics['FDE']:.4f}")
+    # print(f"[Val] Swarm ADE={val_metrics['SWARM_ADE']:.4f}")
+    # print(f"[Val] Swarm FDE={val_metrics['SWARM_FDE']:.4f}")
 
-    # print("\n===== VALIDATION RESULTS =====")
-    # for k, v in val_metrics.items():
-    #     print(f"{k}: {v:.4f}")
+    print("\n===== VALIDATION RESULTS =====")
+    for k, v in val_metrics.items():
+        print(f"{k}: {v:.4f}")
 
     save_path = args.resume_model_path
 
