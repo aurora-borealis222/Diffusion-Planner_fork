@@ -82,21 +82,37 @@ def main():
     # ------------------------
     # VALIDATION
     # ------------------------
-    metrics = validate_epoch(
+    val_metrics = validate_epoch(
         val_loader,
         model,
         args,
         max_experiments=args.quick_val_experiments
     )
 
-    print(f"[Val] ADE={metrics['ADE']:.4f}")
-    print(f"[Val] FDE={metrics['FDE']:.4f}")
-    print(f"[Val] Swarm ADE={metrics['SWARM_ADE']:.4f}")
-    print(f"[Val] Swarm FDE={metrics['SWARM_FDE']:.4f}")
+    print(f"[Val] ADE={val_metrics['ADE']:.4f}")
+    print(f"[Val] FDE={val_metrics['FDE']:.4f}")
+    print(f"[Val] Swarm ADE={val_metrics['SWARM_ADE']:.4f}")
+    print(f"[Val] Swarm FDE={val_metrics['SWARM_FDE']:.4f}")
 
-    print("\n===== VALIDATION RESULTS =====")
-    for k, v in metrics.items():
-        print(f"{k}: {v:.4f}")
+    # print("\n===== VALIDATION RESULTS =====")
+    # for k, v in val_metrics.items():
+    #     print(f"{k}: {v:.4f}")
+
+    save_path = args.resume_model_path
+
+    metrics_path = os.path.join(save_path, "val_metrics.csv")
+
+    row = {
+        "epoch": epoch,
+        **val_metrics
+    }
+
+    df = pd.DataFrame([row])
+
+    if not os.path.exists(metrics_path):
+        df.to_csv(metrics_path, index=False)
+    else:
+        df.to_csv(metrics_path, mode="a", header=False, index=False)
 
 
 if __name__ == "__main__":

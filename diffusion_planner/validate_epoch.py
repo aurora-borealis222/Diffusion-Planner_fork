@@ -56,6 +56,51 @@ def compute_swarm_fde(pred, gt, mask):
     return final_dist.sum(dim=1) / denom
 
 
+def constant_velocity_predict(
+    neighbors_past,
+    future_len=10,
+    dt=1.0
+):
+
+    # neighbors_past:
+    # [B, P, Tpast, 6]
+    # x, y, cos, sin, vx, vy
+
+    last_state = neighbors_past[:, :, -1]
+
+    x0 = last_state[..., 0]
+    y0 = last_state[..., 1]
+
+    vx = last_state[..., 4]
+    vy = last_state[..., 5]
+
+    heading = torch.atan2(vy, vx)
+
+    cos_h = torch.cos(heading)
+    sin_h = torch.sin(heading)
+
+    preds = []
+
+    for t in range(1, future_len + 1):
+
+        xt = x0 + vx * t * dt
+        yt = y0 + vy * t * dt
+
+        pred_t = torch.stack(
+            [
+                xt,
+                yt,
+                cos_h,
+                sin_h,
+            ],
+            dim=-1
+        )
+
+        preds.append(pred_t)
+
+    return torch.stack(preds, dim=2)
+
+
 # -----------------------------
 # Validation
 # -----------------------------
@@ -270,14 +315,86 @@ def validate_epoch(
         batch_swarm_ade = compute_swarm_ade(pred_all, gt_all, full_mask)
         batch_swarm_fde = compute_swarm_fde(pred_all, gt_all, full_mask)
 
-        scene_scale = gt_all[..., :2].abs().mean()
-        rel_ade = batch_swarm_ade.mean() / scene_scale
-        print("Scene scale:", scene_scale.item())
-        print("Relative ADE:", rel_ade.item())
-
         # === DEBUG ===
         # print("ego ADE:", batch_ade.mean().item())
         # print("swarm ADE:", batch_swarm_ade.mean().item())
+
+        # =====================================================
+        # CONSTANT VELOCITY BASELINE
+        # =====================================================
+
+        cv_pred_neighbors = constant_velocity_predict(
+            inputs["neighbor_agents_past"],
+            future_len=neighbors_future.shape[2]
+        )
+
+        # ego baseline:
+        # ego в ego-frame всегда стоит в (0,0)
+
+        B = ego_future.shape[0]
+        T = ego_future.shape[1]
+
+        cv_pred_ego = torch.zeros(
+            B,
+            T,
+            4,
+            device=args.device
+        )
+
+        # heading = 0
+        # cos=1 sin=0
+
+        cv_pred_ego[..., 2] = 1.0
+
+        cv_pred_all = torch.cat(
+            [
+                cv_pred_ego[:, None],
+                cv_pred_neighbors
+            ],
+            dim=1
+        )
+
+        # =====================================================
+        # CV METRICS
+        # =====================================================
+
+        cv_batch_ade = compute_ade(
+            cv_pred_ego,
+            ego_future
+        )
+
+        cv_batch_fde = compute_fde(
+            cv_pred_ego,
+            ego_future
+        )
+
+        cv_batch_swarm_ade = compute_swarm_ade(
+            cv_pred_all,
+            gt_all,
+            full_mask
+        )
+
+        cv_batch_swarm_fde = compute_swarm_fde(
+            cv_pred_all,
+            gt_all,
+            full_mask
+        )
+
+        # scene_scale = gt_all[..., :2].abs().mean()
+        # rel_ade = batch_swarm_ade.mean() / scene_scale
+        # print("Scene scale:", scene_scale.item())
+        # print("Relative ADE:", rel_ade.item())
+
+        scene_scale = gt_all[..., :2].abs().mean()
+
+        rel_ade = batch_swarm_ade.mean() / scene_scale
+        cv_rel_ade = cv_batch_swarm_ade.mean() / scene_scale
+
+        print("Scene scale:", scene_scale.item())
+
+        print("Model Relative ADE:", rel_ade.item())
+        print("CV Relative ADE:", cv_rel_ade.item())
+
 
         # --------------------------------------------------
         # SAVE
@@ -288,6 +405,11 @@ def validate_epoch(
                 "fde": batch_fde[i].item(),
                 "swarm_ade": batch_swarm_ade[i].item(),
                 "swarm_fde": batch_swarm_fde[i].item(),
+
+                "cv_ade": cv_batch_ade[i].item(),
+                "cv_fde": cv_batch_fde[i].item(),
+                "cv_swarm_ade": cv_batch_swarm_ade[i].item(),
+                "cv_swarm_fde": cv_batch_swarm_fde[i].item(),
             })
 
     # --------------------------------------------------
