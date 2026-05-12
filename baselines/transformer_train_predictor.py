@@ -1,0 +1,362 @@
+import os
+import torch
+
+torch.backends.cuda.matmul.allow_tf32 = True
+torch.backends.cudnn.allow_tf32 = True
+
+import pandas as pd
+
+import argparse
+from torch import optim
+from timm.utils import ModelEma
+from torch.utils.data import DataLoader, DistributedSampler
+from torch.nn.parallel import DistributedDataParallel as DDP
+
+# from diffusion_planner.model.diffusion_planner import Diffusion_Planner
+from baselines.transformer_planner_wrapper import Transformer_Planner
+from diffusion_planner.utils.swarm_dataset import SwarmDataset
+
+from diffusion_planner.utils.train_utils import set_seed, save_model, resume_model
+from diffusion_planner.utils.normalizer import ObservationNormalizer, StateNormalizer
+from diffusion_planner.utils.lr_schedule import CosineAnnealingWarmUpRestarts
+from diffusion_planner.utils.tb_log import TensorBoardLogger as Logger
+from diffusion_planner.utils.data_augmentation import StatePerturbation
+from diffusion_planner.utils.swarm_data_augmentation import SwarmStatePerturbation
+from diffusion_planner.utils import ddp
+
+from baselines.transformer_train_epoch import train_epoch
+from baselines.transformer_validate_epoch import validate_epoch
+
+
+def boolean(v):
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
+
+
+def get_args():
+    # Arguments
+    parser = argparse.ArgumentParser(description='Training')
+    parser.add_argument('--name', type=str, help='log name (default: "diffusion-planner-training")',
+                        default="diffusion-planner-training")
+    parser.add_argument('--save_dir', type=str, help='save dir for model ckpt', default=".")
+
+    # Data
+    parser.add_argument('--train_set', type=str, help='path to train data', default=None)
+    # parser.add_argument('--train_set_list', type=str, help='data list of train data', default=None)
+    parser.add_argument('--val_set', type=str, required=True)
+    parser.add_argument('--test_set', type=str, required=False)
+
+    parser.add_argument('--train_set_list', type=str, default='train.json')
+    parser.add_argument('--val_set_list', type=str, default='val.json')
+    parser.add_argument('--test_set_list', type=str, default='test.json')
+
+    parser.add_argument('--quick_val_experiments', type=int, default=5)
+    parser.add_argument('--full_val_every', type=int, default=3)
+
+    parser.add_argument('--future_len', type=int, help='number of time point', default=10)
+    parser.add_argument('--time_len', type=int, help='number of time point', default=21)
+
+    parser.add_argument('--agent_state_dim', type=int, help='past state dim for agents', default=11)
+    parser.add_argument('--agent_num', type=int, help='number of agents', default=16)
+
+    parser.add_argument('--static_objects_state_dim', type=int, help='state dim for static objects', default=10)
+    parser.add_argument('--static_objects_num', type=int, help='number of static objects', default=5)
+
+    parser.add_argument('--lane_len', type=int, help='number of lane point', default=20)
+    parser.add_argument('--lane_state_dim', type=int, help='state dim for lane point', default=12)
+    parser.add_argument('--lane_num', type=int, help='number of lanes', default=70)
+
+    parser.add_argument('--route_len', type=int, help='number of route lane point', default=20)
+    parser.add_argument('--route_state_dim', type=int, help='state dim for route lane point', default=12)
+    parser.add_argument('--route_num', type=int, help='number of route lanes', default=25)
+
+    # DataLoader parameters
+    parser.add_argument('--augment_prob', type=float, help='augmentation probability', default=0.5)
+    parser.add_argument('--normalization_file_path', default='normalization.json',
+                        help='filepath of normalizaiton.json', type=str)
+    parser.add_argument('--use_data_augment', default=True, type=boolean)
+    parser.add_argument('--num_workers', default=16, type=int)
+    parser.add_argument('--pin-mem', action='store_true',
+                        help='Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.')
+    parser.add_argument('--no-pin-mem', action='store_false', dest='pin_mem', help='')
+    parser.set_defaults(pin_mem=True)
+
+    # Training
+    parser.add_argument('--seed', type=int, help='fix random seed', default=3407)
+    parser.add_argument('--train_epochs', type=int, help='epochs of training', default=1)
+    parser.add_argument('--save_utd', type=int, help='save frequency', default=20)
+    parser.add_argument('--batch_size', type=int, help='batch size (default: 2048)', default=64)
+    parser.add_argument('--learning_rate', type=float, help='learning rate (default: 5e-4)', default=5e-4)
+    parser.add_argument('--warm_up_epoch', type=int, help='number of warm up', default=0)
+    parser.add_argument('--encoder_drop_path_rate', type=float, help='encoder drop out rate', default=0.1)
+    parser.add_argument('--decoder_drop_path_rate', type=float, help='decoder drop out rate', default=0.1)
+
+    parser.add_argument('--alpha_planning_loss', type=float, help='coefficient of planning loss (default: 1.0)',
+                        default=1.0)
+
+    parser.add_argument('--device', type=str, help='run on which device (default: cuda)', default='cuda')
+
+    parser.add_argument('--use_ema', default=True, type=boolean)
+
+    # Model
+    parser.add_argument('--encoder_depth', type=int, help='number of encoding layers', default=3)
+    parser.add_argument('--decoder_depth', type=int, help='number of decoding layers', default=3)
+    parser.add_argument('--num_heads', type=int, help='number of multi-head', default=6)
+    parser.add_argument('--hidden_dim', type=int, help='hidden dimension', default=192)
+    parser.add_argument('--diffusion_model_type', type=str, help='type of diffusion model [x_start, score]',
+                        choices=['score', 'x_start'], default='x_start')
+
+    # decoder
+    parser.add_argument('--predicted_neighbor_num', type=int, help='number of neighbor agents to predict', default=16)
+    parser.add_argument('--resume_model_path', type=str, help='path to resume model', default=None)
+
+    parser.add_argument('--use_wandb', default=False, type=boolean)
+    parser.add_argument('--notes', default='', type=str)
+
+    # distributed training parameters
+    parser.add_argument('--ddp', default=False, type=boolean, help='use ddp or not')
+    parser.add_argument('--port', default='22323', type=str, help='port')
+
+    args = parser.parse_args()
+
+    if not hasattr(args, "guidance_fn"):
+        args.guidance_fn = None
+
+    args.state_normalizer = StateNormalizer.from_json(args)
+    args.observation_normalizer = ObservationNormalizer.from_json(args)
+
+    return args
+
+
+def model_training(args):
+    # init ddp
+    global_rank, rank, _ = ddp.ddp_setup_universal(True, args)
+
+    if global_rank == 0:
+        # Logging
+        print("------------- {} -------------".format(args.name))
+        print("Batch size: {}".format(args.batch_size))
+        print("Learning rate: {}".format(args.learning_rate))
+        print("Use device: {}".format(args.device))
+
+        if args.resume_model_path is not None:
+            save_path = args.resume_model_path
+        else:
+            from datetime import datetime
+            time = datetime.now()
+            time = time.strftime("%Y-%m-%d-%H:%M:%S")
+
+            save_path = f"{args.save_dir}/training_log/{args.name}/{time}/"
+            os.makedirs(save_path, exist_ok=True)
+
+        # Save args
+        args_dict = vars(args)
+        args_dict = {k: v if not isinstance(v, (StateNormalizer, ObservationNormalizer)) else v.to_dict() for k, v in
+                     args_dict.items()}
+
+        from mmengine.fileio import dump
+        dump(args_dict, os.path.join(save_path, 'args.json'), file_format='json', indent=4)
+    else:
+        save_path = None
+
+    # set seed
+    set_seed(args.seed + global_rank)
+
+    # training parameters
+    train_epochs = args.train_epochs
+    batch_size = args.batch_size
+
+    # set up data loaders
+    # aug = StatePerturbation(augment_prob=args.augment_prob, device=args.device) if args.use_data_augment else None
+    aug = SwarmStatePerturbation(augment_prob=args.augment_prob, device=args.device) if args.use_data_augment else None
+    # train_set = DiffusionPlannerData(args.train_set, args.train_set_list, args.agent_num, args.predicted_neighbor_num, args.future_len)
+    # train_set = SwarmDataset(
+    #     data_dir=args.train_set,
+    #     #data_list=args.train_set_list,
+    #     past_neighbor_num=args.agent_num,
+    #     predicted_neighbor_num=args.predicted_neighbor_num
+    # )
+
+    train_set = SwarmDataset(
+        data_dir=args.train_set,
+        data_list=args.train_set_list,
+        past_neighbor_num=args.agent_num,
+        predicted_neighbor_num=args.predicted_neighbor_num
+    )
+
+    val_set = SwarmDataset(
+        data_dir=args.val_set,
+        data_list=args.val_set_list,
+        past_neighbor_num=args.agent_num,
+        predicted_neighbor_num=args.predicted_neighbor_num
+    )
+
+    train_sampler = DistributedSampler(train_set, num_replicas=ddp.get_world_size(), rank=global_rank, shuffle=True)
+    train_loader = DataLoader(train_set, sampler=train_sampler, batch_size=batch_size, num_workers=args.num_workers,
+                              pin_memory=True, persistent_workers=True)
+
+    val_loader = DataLoader(
+        val_set,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=args.num_workers,
+        pin_memory=True,
+        persistent_workers=True
+    )
+
+    if global_rank == 0:
+        print("Dataset Prepared: {} train data\n".format(len(train_set)))
+
+    if args.ddp:
+        torch.distributed.barrier()
+
+    transformer_planner = Transformer_Planner(args)
+    transformer_planner = transformer_planner.to(rank if args.device == 'cuda' else args.device)
+
+    if args.ddp:
+        transformer_planner = DDP(transformer_planner, device_ids=[rank])
+
+    # set up model
+    # diffusion_planner = Diffusion_Planner(args)
+    # diffusion_planner = diffusion_planner.to(rank if args.device == 'cuda' else args.device)
+    #
+    # if args.ddp:
+    #     diffusion_planner = DDP(diffusion_planner, device_ids=[rank])
+
+    if args.use_ema:
+        model_ema = ModelEma(
+            transformer_planner,
+            decay=0.999,
+            device=args.device,
+        )
+
+    if global_rank == 0:
+        print(
+            "Model Params: {}".format(sum(p.numel() for p in ddp.get_model(transformer_planner, args.ddp).parameters())))
+
+    # optimizer
+    params = [{'params': ddp.get_model(transformer_planner, args.ddp).parameters(), 'lr': args.learning_rate}]
+
+    optimizer = optim.AdamW(params)
+    scheduler = CosineAnnealingWarmUpRestarts(optimizer, train_epochs, args.warm_up_epoch)
+
+    if args.resume_model_path is not None:
+        print(f"Model loaded from {args.resume_model_path}")
+        transformer_planner, optimizer, scheduler, init_epoch, wandb_id, model_ema = resume_model(args.resume_model_path,
+                                                                                                transformer_planner,
+                                                                                                optimizer, scheduler,
+                                                                                                model_ema, args.device)
+    else:
+        init_epoch = 0
+        wandb_id = None
+
+    # logger
+    wandb_logger = Logger(args.name, args.notes, args, wandb_resume_id=wandb_id, save_path=save_path, rank=global_rank)
+
+    if args.ddp:
+        torch.distributed.barrier()
+
+    best_ade = float("inf")
+
+    val_history = {
+        "epoch": [],
+        "ADE": [],
+    }
+
+    # begin training
+    for epoch in range(init_epoch, train_epochs):
+        if global_rank == 0:
+            print(f"Epoch {epoch + 1}/{train_epochs}")
+        train_loss, train_total_loss = train_epoch(train_loader, transformer_planner, optimizer, args, model_ema, aug)
+
+        if global_rank == 0:
+            lr_dict = {'lr': optimizer.param_groups[0]['lr']}
+            wandb_logger.log_metrics({f"train_loss/{k}": v for k, v in train_loss.items()}, step=epoch + 1)
+            wandb_logger.log_metrics({f"lr/{k}": v for k, v in lr_dict.items()}, step=epoch + 1)
+
+            # save model at the end of epoch
+            save_model(transformer_planner, optimizer, scheduler, save_path, epoch, train_total_loss, wandb_logger.id,
+                       model_ema.ema)
+            print(f"Model saved in {save_path}\n")
+
+            val_metrics = validate_epoch(
+                val_loader,
+                transformer_planner,
+                args,
+                max_experiments=args.quick_val_experiments
+            )
+
+            print(f"[Quick Val] ADE={val_metrics['ADE']:.4f}")
+            print(f"[Quick Val] FDE={val_metrics['FDE']:.4f}")
+            print(f"[Quick Val] Swarm ADE={val_metrics['SWARM_ADE']:.4f}")
+            print(f"[Quick Val] Swarm FDE={val_metrics['SWARM_FDE']:.4f}")
+
+            metrics_path = os.path.join(save_path, "transformer_val_metrics_quick.csv")
+
+            row = {
+                "epoch": epoch,
+                **val_metrics
+            }
+
+            df = pd.DataFrame([row])
+
+            if not os.path.exists(metrics_path):
+                df.to_csv(metrics_path, index=False)
+            else:
+                df.to_csv(metrics_path, mode="a", header=False, index=False)
+
+            # -------------------------
+            # FULL VALIDATION
+            # -------------------------
+            if (epoch + 1) % args.full_val_every == 0:
+
+                val_metrics = validate_epoch(
+                    val_loader,
+                    transformer_planner,
+                    args,
+                    max_experiments=None
+                )
+
+                print(f"[FULL Val] ADE={val_metrics['ADE']:.4f}")
+                print(f"[FULL Val] FDE={val_metrics['FDE']:.4f}")
+                print(f"[FULL Val] Swarm ADE={val_metrics['SWARM_ADE']:.4f}")
+                print(f"[FULL Val] Swarm FDE={val_metrics['SWARM_FDE']:.4f}")
+
+                metrics_path = os.path.join(save_path, "transformer_val_metrics_full.csv")
+
+                row = {
+                    "epoch": epoch,
+                    **val_metrics
+                }
+
+                df = pd.DataFrame([row])
+
+                if not os.path.exists(metrics_path):
+                    df.to_csv(metrics_path, index=False)
+                else:
+                    df.to_csv(metrics_path, mode="a", header=False, index=False)
+
+                # save best
+                if val_metrics["ADE"] < best_ade:
+                    best_ade = val_metrics["ADE"]
+
+                    torch.save(
+                        transformer_planner.state_dict(),
+                        os.path.join(save_path, "best_model.pt")
+                    )
+
+        scheduler.step()
+        train_sampler.set_epoch(epoch + 1)
+
+
+if __name__ == "__main__":
+    args = get_args()
+
+    # Run
+    model_training(args)
