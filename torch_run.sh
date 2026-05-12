@@ -12,7 +12,7 @@ TRAIN_SET_PATH="/home/jovyan/AndreiZ/MARL/TatyanaG/swarm_data_fixed_npy" # prepr
 #TRAIN_SET_LIST_PATH="/home/jovyan/AndreiZ/MARL/TatyanaG/Diffusion-Planner_fork/diffusion_planner_training.json"
 ###################################
 
-$RUN_PYTHON_PATH baselines/transformer_train_predictor.py \
+$RUN_PYTHON_PATH -m baselines.transformer_train_predictor.py \
 --train_set  $TRAIN_SET_PATH \
 --val_set  $TRAIN_SET_PATH \
 --num_workers 8 \
