@@ -3,6 +3,7 @@ from torch.utils.data import DataLoader
 
 import os
 import pandas as pd
+from datetime import datetime
 
 from torch import optim
 from diffusion_planner.model.diffusion_planner import Diffusion_Planner
@@ -103,10 +104,13 @@ def main():
 
     save_path = args.resume_model_path
 
-    metrics_path = os.path.join(save_path, "val_metrics.csv")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"val_metrics_{timestamp}.csv"
+
+    metrics_path = os.path.join(save_path, filename)
 
     row = {
-        "epoch": epoch,
+        # "epoch": epoch,
         **val_metrics
     }
 

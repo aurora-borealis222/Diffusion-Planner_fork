@@ -101,6 +101,93 @@ def constant_velocity_predict(
     return torch.stack(preds, dim=2)
 
 
+def constant_acceleration_predict(
+    neighbors_past,
+    future_len=10,
+    dt=1.0
+):
+    """
+    neighbors_past:
+        [B, P, H, 6]
+
+    features:
+        x, y, cos, sin, vx, vy
+
+    returns:
+        [B, P, T, 4]
+    """
+
+    B, P, H, D = neighbors_past.shape
+
+    device = neighbors_past.device
+
+    # ==========================================
+    # last state
+    # ==========================================
+
+    last_pos = neighbors_past[:, :, -1, :2]     # [B,P,2]
+
+    last_cos = neighbors_past[:, :, -1, 2]
+    last_sin = neighbors_past[:, :, -1, 3]
+
+    last_vel = neighbors_past[:, :, -1, 4:6]    # [B,P,2]
+
+    # ==========================================
+    # previous velocity
+    # ==========================================
+
+    prev_vel = neighbors_past[:, :, -2, 4:6]
+
+    # ==========================================
+    # acceleration
+    # ==========================================
+
+    accel = (last_vel - prev_vel) / dt
+
+    # ==========================================
+    # future prediction
+    # ==========================================
+
+    pred = torch.zeros(
+        B,
+        P,
+        future_len,
+        4,
+        device=device
+    )
+
+    for t in range(future_len):
+
+        tau = (t + 1) * dt
+
+        pos_t = (
+            last_pos
+            + last_vel * tau
+            + 0.5 * accel * (tau ** 2)
+        )
+
+        pred[:, :, t, :2] = pos_t
+
+        # heading сохраняем constant
+        pred[:, :, t, 2] = last_cos
+        pred[:, :, t, 3] = last_sin
+
+    # ==========================================
+    # invalid neighbors -> zero
+    # ==========================================
+
+    invalid_mask = torch.sum(
+        torch.ne(neighbors_past, 0),
+        dim=-1
+    ) == 0
+
+    invalid_mask = invalid_mask[:, :, -1]
+
+    pred[invalid_mask] = 0.
+
+    return pred
+
+
 # -----------------------------
 # Validation
 # -----------------------------
@@ -380,6 +467,58 @@ def validate_epoch(
             full_mask
         )
 
+        # =====================================================
+        # CONSTANT ACCELERATION BASELINE
+        # =====================================================
+
+        ca_pred_neighbors = constant_acceleration_predict(
+            inputs["neighbor_agents_past"],
+            future_len=neighbors_future.shape[2]
+        )
+
+        ca_pred_ego = torch.zeros(
+            B,
+            T,
+            4,
+            device=args.device
+        )
+
+        ca_pred_ego[..., 2] = 1.0
+
+        ca_pred_all = torch.cat(
+            [
+                ca_pred_ego[:, None],
+                ca_pred_neighbors
+            ],
+            dim=1
+        )
+
+        # =====================================================
+        # CA METRICS
+        # =====================================================
+
+        ca_batch_ade = compute_ade(
+            ca_pred_ego,
+            ego_future
+        )
+
+        ca_batch_fde = compute_fde(
+            ca_pred_ego,
+            ego_future
+        )
+
+        ca_batch_swarm_ade = compute_swarm_ade(
+            ca_pred_all,
+            gt_all,
+            full_mask
+        )
+
+        ca_batch_swarm_fde = compute_swarm_fde(
+            ca_pred_all,
+            gt_all,
+            full_mask
+        )
+
         # scene_scale = gt_all[..., :2].abs().mean()
         # rel_ade = batch_swarm_ade.mean() / scene_scale
         # print("Scene scale:", scene_scale.item())
@@ -389,11 +528,13 @@ def validate_epoch(
 
         rel_ade = batch_swarm_ade.mean() / scene_scale
         cv_rel_ade = cv_batch_swarm_ade.mean() / scene_scale
+        ca_rel_ade = ca_batch_swarm_ade.mean() / scene_scale
 
         print("Scene scale:", scene_scale.item())
 
         print("Model Relative ADE:", rel_ade.item())
         print("CV Relative ADE:", cv_rel_ade.item())
+        print("CA Relative ADE:", ca_rel_ade.item())
 
 
         # --------------------------------------------------
@@ -410,6 +551,11 @@ def validate_epoch(
                 "cv_fde": cv_batch_fde[i].item(),
                 "cv_swarm_ade": cv_batch_swarm_ade[i].item(),
                 "cv_swarm_fde": cv_batch_swarm_fde[i].item(),
+
+                "ca_ade": ca_batch_ade[i].item(),
+                "ca_fde": ca_batch_fde[i].item(),
+                "ca_swarm_ade": ca_batch_swarm_ade[i].item(),
+                "ca_swarm_fde": ca_batch_swarm_fde[i].item(),
             })
 
     # --------------------------------------------------
