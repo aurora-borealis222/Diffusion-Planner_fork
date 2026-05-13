@@ -156,23 +156,12 @@ def model_training(args):
     else:
         save_path = None
 
-    # set seed
     set_seed(args.seed + global_rank)
 
-    # training parameters
     train_epochs = args.train_epochs
     batch_size = args.batch_size
     
-    # set up data loaders
-    # aug = StatePerturbation(augment_prob=args.augment_prob, device=args.device) if args.use_data_augment else None
     aug = SwarmStatePerturbation(augment_prob=args.augment_prob, device=args.device) if args.use_data_augment else None
-    # train_set = DiffusionPlannerData(args.train_set, args.train_set_list, args.agent_num, args.predicted_neighbor_num, args.future_len)
-    # train_set = SwarmDataset(
-    #     data_dir=args.train_set,
-    #     #data_list=args.train_set_list,
-    #     past_neighbor_num=args.agent_num,
-    #     predicted_neighbor_num=args.predicted_neighbor_num
-    # )
 
     train_set = SwarmDataset(
         data_dir=args.train_set,
@@ -206,7 +195,6 @@ def model_training(args):
     if args.ddp:
         torch.distributed.barrier()
 
-    # set up model
     diffusion_planner = Diffusion_Planner(args)
     diffusion_planner = diffusion_planner.to(rank if args.device == 'cuda' else args.device)
 
@@ -223,7 +211,6 @@ def model_training(args):
     if global_rank == 0:
         print("Model Params: {}".format(sum(p.numel() for p in ddp.get_model(diffusion_planner, args.ddp).parameters())))
 
-    # optimizer
     params = [{'params': ddp.get_model(diffusion_planner, args.ddp).parameters(), 'lr': args.learning_rate}]
 
     optimizer = optim.AdamW(params)
@@ -236,8 +223,7 @@ def model_training(args):
         init_epoch = 0
         wandb_id = None
 
-    # logger
-    wandb_logger = Logger(args.name, args.notes, args, wandb_resume_id=wandb_id, save_path=save_path, rank=global_rank) 
+    wandb_logger = Logger(args.name, args.notes, args, wandb_resume_id=wandb_id, save_path=save_path, rank=global_rank)
 
     if args.ddp:
         torch.distributed.barrier()
@@ -249,7 +235,6 @@ def model_training(args):
         "ADE": [],
     }
 
-    # begin training
     for epoch in range(init_epoch, train_epochs):
         if global_rank == 0:
             print(f"Epoch {epoch+1}/{train_epochs}")
@@ -260,7 +245,6 @@ def model_training(args):
             wandb_logger.log_metrics({f"train_loss/{k}": v for k, v in train_loss.items()}, step=epoch+1)
             wandb_logger.log_metrics({f"lr/{k}": v for k, v in lr_dict.items()}, step=epoch+1)
 
-            # save model at the end of epoch
             save_model(diffusion_planner, optimizer, scheduler, save_path, epoch, train_total_loss, wandb_logger.id, model_ema.ema)
             print(f"Model saved in {save_path}\n")
 
@@ -290,9 +274,6 @@ def model_training(args):
             else:
                 df.to_csv(metrics_path, mode="a", header=False, index=False)
 
-            # -------------------------
-            # FULL VALIDATION
-            # -------------------------
             if (epoch + 1) % args.full_val_every == 0:
 
                 val_metrics = validate_epoch(

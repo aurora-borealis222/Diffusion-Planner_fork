@@ -23,8 +23,7 @@ class Decoder(nn.Module):
         self.dit = DiT(
             sde=self._sde,
             route_encoder=None,
-            # route_encoder = RouteEncoder(config.route_num, config.lane_len, drop_path_rate=config.encoder_drop_path_rate, hidden_dim=config.hidden_dim),
-            depth=config.decoder_depth, 
+            depth=config.decoder_depth,
             output_dim= (config.future_len + 1) * 4, # x, y, cos, sin
             hidden_dim=config.hidden_dim, 
             heads=config.num_heads, 
@@ -89,7 +88,6 @@ class Decoder(nn.Module):
         route_lanes = inputs['route_lanes']
 
         if self.training:
-            # assert sampled_trajectories.shape[-1] == (self._future_len + 1) * 4
             sampled_trajectories = inputs['sampled_trajectories'].reshape(B, P, -1) # [B, 1 + predicted_neighbor_num, (1 + V_future) * 4]
             assert sampled_trajectories.shape[-1] == (self._future_len + 1) * 4
             diffusion_time = inputs['diffusion_time']
@@ -231,8 +229,6 @@ class DiT(nn.Module):
         x_embedding = x_embedding[None, :, :].expand(B, -1, -1) # (B, P, D)
         x = x + x_embedding     
 
-        # route_encoding = self.route_encoder(route_lanes)
-        # y = route_encoding
         y = self.t_embedder(t)
 
         attn_mask = torch.zeros((B, P), dtype=torch.bool, device=x.device)

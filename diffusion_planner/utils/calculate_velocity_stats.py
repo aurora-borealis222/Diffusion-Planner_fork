@@ -24,7 +24,6 @@ for f in files:
     vx = arr[..., 2]
     vy = arr[..., 3]
 
-    # маска валидных (не нулевых) точек
     mask = np.any(arr != 0, axis=-1)
 
     vx_valid = vx[mask]

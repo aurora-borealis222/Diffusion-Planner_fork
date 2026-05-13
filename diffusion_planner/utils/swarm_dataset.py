@@ -39,12 +39,6 @@ class SwarmDataset(Dataset):
         self._past_neighbor_num = past_neighbor_num
         self._predicted_neighbor_num = predicted_neighbor_num
 
-        # список экспериментов
-        # self.exp_dirs = sorted(
-        #     d for d in os.listdir(data_dir)
-        #     if os.path.isdir(os.path.join(data_dir, d))
-        # )
-
         if data_list is None:
             self.exp_dirs = sorted(
                 d for d in os.listdir(data_dir)
@@ -57,10 +51,8 @@ class SwarmDataset(Dataset):
         if len(self.exp_dirs) == 0:
             raise RuntimeError(f"No experiments found in {data_dir}")
 
-        # глобальный индекс (exp_idx, frame_idx)
         self.index = []
 
-        # определяем размер каждого эксперимента
         for exp_idx, exp_name in enumerate(self.exp_dirs):
             ego_path = os.path.join(
                 data_dir, exp_name, "ego_current_state.npy"
@@ -71,11 +63,9 @@ class SwarmDataset(Dataset):
             for i in range(num_frames):
                 self.index.append((exp_idx, i))
 
-        # кеш одного эксперимента (на worker)
         self._current_exp_idx = None
         self._arrays = None
 
-    # ---------------- internal ----------------
 
     def _load_experiment(self, exp_idx: int):
         """
@@ -96,8 +86,6 @@ class SwarmDataset(Dataset):
         }
 
         self._current_exp_idx = exp_idx
-
-    # ---------------- Dataset API ----------------
 
     def __len__(self):
         return len(self.index)

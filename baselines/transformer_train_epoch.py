@@ -35,10 +35,6 @@ def train_epoch(
 
         for batch in data_epoch:
 
-            # ==========================================
-            # INPUTS
-            # ==========================================
-
             inputs = {
                 'ego_current_state': batch[0].to(args.device),
 
@@ -59,10 +55,6 @@ def train_epoch(
 
             neighbors_future = batch[3].to(args.device)
 
-            # ==========================================
-            # EGO-CENTRIC AUGMENTATION
-            # ==========================================
-
             if aug is not None:
 
                 inputs, ego_future, neighbors_future = aug(
@@ -70,10 +62,6 @@ def train_epoch(
                     ego_future,
                     neighbors_future
                 )
-
-            # ==========================================
-            # FUTURE -> cos/sin
-            # ==========================================
 
             ego_future = torch.cat(
                 [
@@ -112,10 +100,6 @@ def train_epoch(
 
             neighbors_future[neighbor_future_mask] = 0.
 
-            # ==========================================
-            # CURRENT EGO -> cos/sin
-            # ==========================================
-
             ego = inputs["ego_current_state"]
 
             inputs["ego_current_state"] = torch.cat(
@@ -132,11 +116,6 @@ def train_epoch(
                 ],
                 dim=-1,
             )
-
-            # ==========================================
-            # NEIGHBORS PAST
-            # x,y,cos,sin,vx,vy
-            # ==========================================
 
             neighbors = inputs["neighbor_agents_past"]
 
@@ -157,10 +136,6 @@ def train_epoch(
                 dim=-1
             )
 
-            # ==========================================
-            # NORMALIZATION
-            # ==========================================
-
             inputs = args.observation_normalizer(inputs)
 
             gt_all = torch.cat(
@@ -176,43 +151,13 @@ def train_epoch(
             ego_future = gt_all[:, 0]
             neighbors_future = gt_all[:, 1:]
 
-            # ego_future = args.state_normalizer(
-            #     ego_future
-            # )
-            #
-            # neighbors_future = args.state_normalizer(
-            #     neighbors_future
-            # )
-
-            # ==========================================
-            # FORWARD
-            # ==========================================
-
             optimizer.zero_grad()
 
-            # _, out = model(inputs)
             out = model(inputs)
 
             pred_all = out["prediction"]
 
-            # pred_ego = pred_all[:, 0]
-            #
-            # pred_neighbors = pred_all[:, 1:]
-
             pred_neighbors = pred_all
-
-            # ==========================================
-            # LOSSES
-            # ==========================================
-
-            # ego loss
-
-            # ego_loss = torch.abs(
-            #     pred_ego[..., :2]
-            #     - ego_future[..., :2]
-            # ).mean()
-
-            # neighbor loss
 
             valid_neighbor_mask = ~neighbor_future_mask
 
@@ -231,18 +176,7 @@ def train_epoch(
                 / (valid_neighbor_mask.sum() + 1e-6)
             )
 
-            # total
-
-            # total_loss = (
-            #     neighbor_loss
-            #     + args.alpha_planning_loss * ego_loss
-            # )
-
             total_loss = neighbor_loss
-
-            # ==========================================
-            # BACKWARD
-            # ==========================================
 
             total_loss.backward()
 
@@ -259,43 +193,24 @@ def train_epoch(
             if args.ddp:
                 torch.cuda.synchronize()
 
-            # ==========================================
-            # LOGGING
-            # ==========================================
-
             data_epoch.set_postfix(
                 loss='{:.4f}'.format(total_loss.item())
             )
-
-            # epoch_loss.append({
-            #     "loss": total_loss.detach(),
-            #     "ego_planning_loss": ego_loss.detach(),
-            #     "neighbor_prediction_loss": neighbor_loss.detach(),
-            # })
 
             epoch_loss.append({
                 "loss": total_loss.detach(),
                 "neighbor_prediction_loss": neighbor_loss.detach(),
             })
 
-    # ==========================================
-    # EPOCH METRICS
-    # ==========================================
-
     mean_total = np.mean(
         [x["loss"].item() for x in epoch_loss]
     )
-
-    # mean_ego = np.mean(
-    #     [x["ego_planning_loss"].item() for x in epoch_loss]
-    # )
 
     mean_neighbor = np.mean(
         [x["neighbor_prediction_loss"].item() for x in epoch_loss]
     )
 
     history["total_loss"].append(mean_total)
-    # history["ego_loss"].append(mean_ego)
     history["neighbor_loss"].append(mean_neighbor)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

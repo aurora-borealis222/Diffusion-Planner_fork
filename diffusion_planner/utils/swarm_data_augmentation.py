@@ -116,10 +116,6 @@ class SwarmStatePerturbation:
 
         transform_matrix = self.get_transform_matrix_batch(heading)
 
-        # ==================================================
-        # ego future
-        # ==================================================
-
         ego_future[..., :2] = vector_transform(
             ego_future[..., :2],
             transform_matrix,
@@ -130,10 +126,6 @@ class SwarmStatePerturbation:
             ego_future[..., 2],
             transform_matrix
         )
-
-        # ==================================================
-        # neighbors past
-        # ==================================================
 
         mask = torch.sum(
             torch.ne(inputs["neighbor_agents_past"], 0),
@@ -158,10 +150,6 @@ class SwarmStatePerturbation:
 
         inputs["neighbor_agents_past"][mask] = 0.
 
-        # ==================================================
-        # neighbors future
-        # ==================================================
-
         mask = torch.all(
             neighbors_future == 0,
             dim=-1
@@ -179,10 +167,6 @@ class SwarmStatePerturbation:
         )
 
         neighbors_future[mask] = 0.
-
-        # ==================================================
-        # ego current state -> ego frame
-        # ==================================================
 
         inputs["ego_current_state"][:, 0] = 0.
         inputs["ego_current_state"][:, 1] = 0.

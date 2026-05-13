@@ -50,8 +50,6 @@ class Diffusion_Planner_Encoder(nn.Module):
         nn.init.normal_(self.encoder.pos_emb.weight, std=0.02)
         if hasattr(self.encoder.neighbor_encoder, "type_emb"):
             nn.init.normal_(self.encoder.neighbor_encoder.type_emb.weight, std=0.02)
-        # nn.init.normal_(self.encoder.lane_encoder.speed_limit_emb.weight, std=0.02)
-        # nn.init.normal_(self.encoder.lane_encoder.traffic_emb.weight, std=0.02)
 
     def forward(self, inputs):
 

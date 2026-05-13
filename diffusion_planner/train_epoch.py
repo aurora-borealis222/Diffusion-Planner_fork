@@ -4,7 +4,6 @@ from torch import nn
 import numpy as np
 from datetime import datetime
 
-from diffusion_planner.utils.data_augmentation import StatePerturbation
 from diffusion_planner.utils.swarm_data_augmentation import SwarmStatePerturbation
 from diffusion_planner.utils.train_utils import get_epoch_mean_loss
 from diffusion_planner.utils import ddp
@@ -68,11 +67,10 @@ def train_epoch(data_loader, model, optimizer, args, ema, aug: SwarmStatePerturb
 
             ego_future = batch[1].to(args.device)
             neighbors_future = batch[3].to(args.device)
-            # Normalize to ego-centric
+
             if aug is not None:
                 inputs, ego_future, neighbors_future = aug(inputs, ego_future, neighbors_future)
 
-            # heading to cos sin
             ego_future = torch.cat(
             [
                 ego_future[..., :2],
@@ -95,7 +93,6 @@ def train_epoch(data_loader, model, optimizer, args, ema, aug: SwarmStatePerturb
             )
             neighbors_future[mask] = 0.
 
-            # ego current: [x, y, heading] -> [x, y, cos, sin]
             ego = inputs["ego_current_state"]
             inputs["ego_current_state"] = torch.cat(
                 [
@@ -105,13 +102,11 @@ def train_epoch(data_loader, model, optimizer, args, ema, aug: SwarmStatePerturb
                 dim=-1,
             )
 
-            # neighbors current (all past steps)
-            # inputs["neighbor_agents_past"] = inputs["neighbor_agents_past"][..., :4]
             neighbors = inputs["neighbor_agents_past"]
 
             inputs["neighbor_agents_past"] = torch.cat(
                 [
-                    neighbors[..., :2],  # x,y
+                    neighbors[..., :2],
 
                     torch.stack(
                         [
@@ -121,66 +116,13 @@ def train_epoch(data_loader, model, optimizer, args, ema, aug: SwarmStatePerturb
                         dim=-1
                     ),
 
-                    neighbors[..., 2:4],  # vx, vy
+                    neighbors[..., 2:4],
                 ],
                 dim=-1
             )
 
-            # vx = neighbors_past[..., 2]
-            # vy = neighbors_past[..., 3]
-            #
-            # speed = torch.sqrt(vx ** 2 + vy ** 2)
-            #
-            # valid = torch.sum(torch.ne(neighbors_past[..., :4], 0), dim=-1) > 0
-            #
-            # speed = speed[valid]
-            #
-            # print(
-            #     "neighbor speed stats:",
-            #     "mean =", speed.mean().item(),
-            #     "std =", speed.std().item(),
-            #     "max =", speed.max().item(),
-            # )
-
-            # print("neighbor_agents_past", inputs["neighbor_agents_past"])
-            # vx = inputs["neighbor_agents_past"][..., 4]
-            # vy = inputs["neighbor_agents_past"][..., 5]
-
-            # print("vx mean", vx.mean())
-            # print("vy mean", vy.mean())
-            #
-            # print("vx std", vx.std())
-            # print("vy std", vy.std())
-
-            # valid_mask = torch.sum(
-            #     torch.ne(inputs["neighbor_agents_past"], 0),
-            #     dim=-1
-            # ) > 0
-
-            # vx_valid = vx[valid_mask]
-            # vy_valid = vy[valid_mask]
-
-            # print("raw vx mean:", neighbors[..., 2].mean())
-            # print("raw vy mean:", neighbors[..., 3].mean())
-
-            # print("VX mean:", vx_valid.mean().item())
-            # print("VX std:", vx_valid.std().item())
-            #
-            # print("VY mean:", vy_valid.mean().item())
-            # print("VY std:", vy_valid.std().item())
-            #
-            # speed = torch.sqrt(vx_valid ** 2 + vy_valid ** 2)
-            #
-            # print("Speed mean:", speed.mean().item())
-            # print("Speed std:", speed.std().item())
-            # print("Speed max:", speed.max().item())
-
-            # for k, v in inputs.items():
-            #     print(k, v.shape)
-
             inputs = args.observation_normalizer(inputs)
-                  
-            # call the mdoel
+
             optimizer.zero_grad()
             loss = {}
 
@@ -198,7 +140,6 @@ def train_epoch(data_loader, model, optimizer, args, ema, aug: SwarmStatePerturb
 
             total_loss = loss['loss'].item()
 
-            # loss backward
             loss['loss'].backward()
 
             nn.utils.clip_grad_norm_(model.parameters(), 5)
@@ -226,10 +167,6 @@ def train_epoch(data_loader, model, optimizer, args, ema, aug: SwarmStatePerturb
     filename = f"training_epoch_{timestamp}.npy"
 
     np.save(filename, history)
-
-    # print(f"Epoch total loss: {mean_total:.4f}")
-    # print(f"Epoch ego loss: {mean_ego:.4f}")
-    # print(f"Epoch neighbor loss: {mean_neighbor:.4f}")
 
     epoch_mean_loss = get_epoch_mean_loss(epoch_loss)
 

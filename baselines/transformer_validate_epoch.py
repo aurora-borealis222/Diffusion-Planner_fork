@@ -7,10 +7,6 @@ from diffusion_planner.utils.swarm_data_augmentation import (
 )
 
 
-# =========================================================
-# METRICS
-# =========================================================
-
 def compute_ade(pred, gt):
 
     pred_xy = pred[..., :2]
@@ -82,9 +78,6 @@ def compute_swarm_fde(pred, gt, mask):
     return final_dist.sum(dim=1) / denom
 
 
-# =========================================================
-# VALIDATION
-# =========================================================
 
 @torch.no_grad()
 def validate_epoch(
@@ -113,10 +106,6 @@ def validate_epoch(
         *data, exp_idx = batch
 
         exp_idx = exp_idx.numpy()
-
-        # =====================================================
-        # SUBSET OF EXPERIMENTS
-        # =====================================================
 
         if max_experiments is not None:
 
@@ -154,10 +143,6 @@ def validate_epoch(
                     if len(used_experiments) < max_experiments:
                         used_experiments.add(e)
 
-        # =====================================================
-        # INPUTS
-        # =====================================================
-
         inputs = {
 
             'ego_current_state':
@@ -192,10 +177,6 @@ def validate_epoch(
 
         neighbors_future = data[3].to(args.device)
 
-        # =====================================================
-        # EGO-CENTRIC TRANSFORM
-        # =====================================================
-
         inputs, ego_future, neighbors_future = (
             val_transform.centric_transform(
                 inputs,
@@ -204,10 +185,6 @@ def validate_epoch(
             )
         )
 
-        # =====================================================
-        # FUTURE MASK
-        # =====================================================
-
         neighbor_future_mask = torch.sum(
             torch.ne(
                 neighbors_future[..., :3],
@@ -215,10 +192,6 @@ def validate_epoch(
             ),
             dim=-1
         ) == 0
-
-        # =====================================================
-        # FUTURE -> cos/sin
-        # =====================================================
 
         ego_future = torch.cat(
             [
@@ -254,10 +227,6 @@ def validate_epoch(
             neighbor_future_mask
         ] = 0.
 
-        # =====================================================
-        # CURRENT EGO -> cos/sin
-        # =====================================================
-
         ego = inputs["ego_current_state"]
 
         inputs["ego_current_state"] = torch.cat(
@@ -274,11 +243,6 @@ def validate_epoch(
             ],
             dim=-1,
         )
-
-        # =====================================================
-        # NEIGHBORS PAST
-        # x,y,cos,sin,vx,vy
-        # =====================================================
 
         neighbors = inputs["neighbor_agents_past"]
 
@@ -299,64 +263,17 @@ def validate_epoch(
             dim=-1
         )
 
-        # =====================================================
-        # NORMALIZATION
-        # =====================================================
-
         inputs = args.observation_normalizer(
             inputs
         )
-
-        # =====================================================
-        # INFERENCE
-        # =====================================================
-
-        # _, out = model(inputs)
 
         out = model(inputs)
 
         pred_all = out["prediction"]
 
-        # pred_ego = pred_all[:, 0]
-
-        # pred_neighbors = pred_all[:, 1:]
-
         pred_neighbors = pred_all
 
-        # =====================================================
-        # GROUND TRUTH
-        # =====================================================
-
-        # gt_all = torch.cat(
-        #     [
-        #         ego_future[:, None],
-        #         neighbors_future
-        #     ],
-        #     dim=1
-        # )
-
         gt_all = neighbors_future
-
-        # =====================================================
-        # FULL MASK
-        # =====================================================
-
-        # ego_mask = torch.zeros_like(
-        #     ego_future[..., 0],
-        #     dtype=torch.bool
-        # )
-        #
-        # full_mask = torch.cat(
-        #     [
-        #         ego_mask[:, None],
-        #         neighbor_future_mask
-        #     ],
-        #     dim=1
-        # )
-
-        # =====================================================
-        # METRICS
-        # =====================================================
 
         batch_ade = compute_ade(
             pred_ego,
@@ -380,10 +297,6 @@ def validate_epoch(
             neighbor_future_mask
         )
 
-        # =====================================================
-        # SAVE METRICS
-        # =====================================================
-
         for i, e in enumerate(exp_idx):
 
             exp_metrics[int(e)].append({
@@ -400,10 +313,6 @@ def validate_epoch(
                 "swarm_fde":
                     batch_swarm_fde[i].item(),
             })
-
-    # =====================================================
-    # AGGREGATION
-    # =====================================================
 
     results = defaultdict(list)
 

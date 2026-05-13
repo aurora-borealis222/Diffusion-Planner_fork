@@ -5,9 +5,6 @@ from tqdm import tqdm
 from diffusion_planner.utils.swarm_data_augmentation import SwarmStatePerturbation
 
 
-# -----------------------------
-# Метрики (per-sample)
-# -----------------------------
 def compute_ade(pred, gt):
     pred_xy = pred[..., :2]
     gt_xy = gt[..., :2]
@@ -23,9 +20,6 @@ def compute_fde(pred, gt):
     return torch.norm(pred_xy - gt_xy, dim=-1)  # [B]
 
 
-# -----------------------------
-# Swarm метрики
-# -----------------------------
 def compute_swarm_ade(pred, gt, mask):
     valid_mask = ~mask
 
@@ -61,10 +55,6 @@ def constant_velocity_predict(
     future_len=10,
     dt=1.0
 ):
-
-    # neighbors_past:
-    # [B, P, Tpast, 6]
-    # x, y, cos, sin, vx, vy
 
     last_state = neighbors_past[:, :, -1]
 
@@ -121,10 +111,6 @@ def constant_acceleration_predict(
 
     device = neighbors_past.device
 
-    # ==========================================
-    # last state
-    # ==========================================
-
     last_pos = neighbors_past[:, :, -1, :2]     # [B,P,2]
 
     last_cos = neighbors_past[:, :, -1, 2]
@@ -132,21 +118,9 @@ def constant_acceleration_predict(
 
     last_vel = neighbors_past[:, :, -1, 4:6]    # [B,P,2]
 
-    # ==========================================
-    # previous velocity
-    # ==========================================
-
     prev_vel = neighbors_past[:, :, -2, 4:6]
 
-    # ==========================================
-    # acceleration
-    # ==========================================
-
     accel = (last_vel - prev_vel) / dt
-
-    # ==========================================
-    # future prediction
-    # ==========================================
 
     pred = torch.zeros(
         B,
@@ -168,13 +142,9 @@ def constant_acceleration_predict(
 
         pred[:, :, t, :2] = pos_t
 
-        # heading сохраняем constant
         pred[:, :, t, 2] = last_cos
         pred[:, :, t, 3] = last_sin
 
-    # ==========================================
-    # invalid neighbors -> zero
-    # ==========================================
 
     invalid_mask = torch.sum(
         torch.ne(neighbors_past, 0),
@@ -188,9 +158,6 @@ def constant_acceleration_predict(
     return pred
 
 
-# -----------------------------
-# Validation
-# -----------------------------
 @torch.no_grad()
 def validate_epoch(
     data_loader,
@@ -212,9 +179,6 @@ def validate_epoch(
         *data, exp_idx = batch
         exp_idx = exp_idx.numpy()
 
-        # --------------------------------------------------
-        # SUBSET ПО EXPERIMENT
-        # --------------------------------------------------
         if max_experiments is not None:
 
             batch_exps = set(int(e) for e in exp_idx)
@@ -234,9 +198,6 @@ def validate_epoch(
                     if len(used_experiments) < max_experiments:
                         used_experiments.add(e)
 
-        # --------------------------------------------------
-        # INPUT
-        # --------------------------------------------------
         inputs = {
             'ego_current_state': data[0].to(args.device),
             'neighbor_agents_past': data[2].to(args.device),
@@ -283,16 +244,8 @@ def validate_epoch(
             dim=-1,
         )
 
-        # зануление невалидных
         neighbors_future[neighbor_future_mask] = 0.
 
-        # neighbor_future_mask = data[11].to(args.device)  # предполагаем, что он есть
-
-        # neighbors_valid = ~neighbor_future_mask  # True = валидный
-
-        # --------------------------------------------------
-        # heading -> cos/sin
-        # --------------------------------------------------
         ego = inputs["ego_current_state"]
         inputs["ego_current_state"] = torch.cat(
             [
@@ -302,7 +255,6 @@ def validate_epoch(
             dim=-1,
         )
 
-        # inputs["neighbor_agents_past"] = inputs["neighbor_agents_past"][..., :4]
         neighbors = inputs["neighbor_agents_past"]
 
         inputs["neighbor_agents_past"] = torch.cat(
@@ -322,101 +274,35 @@ def validate_epoch(
             dim=-1
         )
 
-        # vx = inputs["neighbor_agents_past"][..., 4]
-        # vy = inputs["neighbor_agents_past"][..., 5]
-        #
-        # valid_mask = torch.sum(
-        #     torch.ne(inputs["neighbor_agents_past"], 0),
-        #     dim=-1
-        # ) > 0
-        #
-        # vx_valid = vx[valid_mask]
-        # vy_valid = vy[valid_mask]
-        #
-        # print("VX mean:", vx_valid.mean().item())
-        # print("VX std:", vx_valid.std().item())
-        #
-        # print("VY mean:", vy_valid.mean().item())
-        # print("VY std:", vy_valid.std().item())
-        #
-        # speed = torch.sqrt(vx_valid ** 2 + vy_valid ** 2)
-        #
-        # print("Speed mean:", speed.mean().item())
-        # print("Speed std:", speed.std().item())
-        # print("Speed max:", speed.max().item())
-
-        # print("BEFORE norm mean:", inputs["ego_current_state"].mean().item())
-
         inputs = args.observation_normalizer(inputs)
-
-        # print("After norm mean:", inputs["ego_current_state"].mean().item())
-        # print("After norm std:", inputs["ego_current_state"].std().item())
-
-        # --------------------------------------------------
-        # INFERENCE
-        # --------------------------------------------------
         _, out = model(inputs)
 
         pred_all = out["prediction"]  # [B, P, T, 4]
 
 
-        # === DEBUG SCALE CHECK ===
-        # gt_all_debug = torch.cat([ego_future[:, None], neighbors_future], dim=1)
-        #
-        # print("PRED mean:", pred_all[..., :2].mean().item())
-        # print("GT mean:", gt_all_debug[..., :2].mean().item())
-        #
-        # print("PRED std:", pred_all[..., :2].std().item())
-        # print("GT std:", gt_all_debug[..., :2].std().item())
-
-        # === NORMALIZER CHECK ===
-        # normed_inputs = args.observation_normalizer(inputs)
-
-        # print("Input diff after renorm:",
-        #       (normed_inputs["ego_current_state"] - inputs["ego_current_state"]).abs().mean().item())
-        #
-        # print("Input ego mean:", inputs["ego_current_state"].mean().item())
-        # print("Input ego std:", inputs["ego_current_state"].std().item())
-
-
         pred_ego = pred_all[:, 0]
         pred_neighbors = pred_all[:, 1:]
 
-        # GT
         gt_all = torch.cat([ego_future[:, None], neighbors_future], dim=1)
-        # gt_all = args.state_normalizer(gt_all)
 
-        # mask
         ego_mask = torch.zeros_like(ego_future[..., 0], dtype=torch.bool)  # ego всегда валиден
 
         full_mask = torch.cat(
             [ego_mask[:, None], neighbor_future_mask],
             dim=1
         )
-        # --------------------------------------------------
-        # METRICS
-        # --------------------------------------------------
+
         batch_ade = compute_ade(pred_ego, ego_future)
         batch_fde = compute_fde(pred_ego, ego_future)
 
         batch_swarm_ade = compute_swarm_ade(pred_all, gt_all, full_mask)
         batch_swarm_fde = compute_swarm_fde(pred_all, gt_all, full_mask)
 
-        # === DEBUG ===
-        # print("ego ADE:", batch_ade.mean().item())
-        # print("swarm ADE:", batch_swarm_ade.mean().item())
-
-        # =====================================================
-        # CONSTANT VELOCITY BASELINE
-        # =====================================================
 
         cv_pred_neighbors = constant_velocity_predict(
             inputs["neighbor_agents_past"],
             future_len=neighbors_future.shape[2]
         )
-
-        # ego baseline:
-        # ego в ego-frame всегда стоит в (0,0)
 
         B = ego_future.shape[0]
         T = ego_future.shape[1]
@@ -428,9 +314,6 @@ def validate_epoch(
             device=args.device
         )
 
-        # heading = 0
-        # cos=1 sin=0
-
         cv_pred_ego[..., 2] = 1.0
 
         cv_pred_all = torch.cat(
@@ -440,10 +323,6 @@ def validate_epoch(
             ],
             dim=1
         )
-
-        # =====================================================
-        # CV METRICS
-        # =====================================================
 
         cv_batch_ade = compute_ade(
             cv_pred_ego,
@@ -467,10 +346,6 @@ def validate_epoch(
             full_mask
         )
 
-        # =====================================================
-        # CONSTANT ACCELERATION BASELINE
-        # =====================================================
-
         ca_pred_neighbors = constant_acceleration_predict(
             inputs["neighbor_agents_past"],
             future_len=neighbors_future.shape[2]
@@ -492,10 +367,6 @@ def validate_epoch(
             ],
             dim=1
         )
-
-        # =====================================================
-        # CA METRICS
-        # =====================================================
 
         ca_batch_ade = compute_ade(
             ca_pred_ego,
@@ -519,11 +390,6 @@ def validate_epoch(
             full_mask
         )
 
-        # scene_scale = gt_all[..., :2].abs().mean()
-        # rel_ade = batch_swarm_ade.mean() / scene_scale
-        # print("Scene scale:", scene_scale.item())
-        # print("Relative ADE:", rel_ade.item())
-
         scene_scale = gt_all[..., :2].abs().mean()
 
         rel_ade = batch_swarm_ade.mean() / scene_scale
@@ -537,9 +403,6 @@ def validate_epoch(
         print("CA Relative ADE:", ca_rel_ade.item())
 
 
-        # --------------------------------------------------
-        # SAVE
-        # --------------------------------------------------
         for i, e in enumerate(exp_idx):
             exp_metrics[int(e)].append({
                 "ade": batch_ade[i].item(),
@@ -558,9 +421,7 @@ def validate_epoch(
                 "ca_swarm_fde": ca_batch_swarm_fde[i].item(),
             })
 
-    # --------------------------------------------------
-    # AGGREGATION
-    # --------------------------------------------------
+
     results = defaultdict(list)
 
     for e in exp_metrics:

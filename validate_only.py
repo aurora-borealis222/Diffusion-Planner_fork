@@ -25,11 +25,6 @@ def main():
     args.state_normalizer = StateNormalizer.from_json(args)
     args.observation_normalizer = ObservationNormalizer.from_json(args)
 
-    # print("Normalizer keys:", args.observation_normalizer._normalization_dict.keys())
-
-    # ------------------------
-    # MODEL
-    # ------------------------
     global_rank, rank, _ = ddp.ddp_setup_universal(True, args)
 
     model = Diffusion_Planner(args).to(rank if args.device == 'cuda' else args.device)
@@ -47,24 +42,12 @@ def main():
                                                                                             optimizer, scheduler,
                                                                                             model_ema, args.device)
 
-    # model, optimizer, scheduler, epoch, _, model_ema = resume_model(
-    #     args.resume_model_path,
-    #     model,
-    #     optimizer,
-    #     scheduler,
-    #     model_ema,
-    #     args.device
-    # )
 
     print(f"Model loaded from {args.resume_model_path}")
 
-    # 👉 используем EMA если есть
     model = model_ema.ema if model_ema is not None else model
     model.eval()
 
-    # ------------------------
-    # DATA
-    # ------------------------
     val_set = SwarmDataset(
         data_dir=args.val_set,
         data_list=args.val_set_list,
@@ -83,20 +66,12 @@ def main():
 
     print(f"Validation samples: {len(val_set)}")
 
-    # ------------------------
-    # VALIDATION
-    # ------------------------
     val_metrics = validate_epoch(
         val_loader,
         model,
         args,
         max_experiments=args.quick_val_experiments
     )
-
-    # print(f"[Val] ADE={val_metrics['ADE']:.4f}")
-    # print(f"[Val] FDE={val_metrics['FDE']:.4f}")
-    # print(f"[Val] Swarm ADE={val_metrics['SWARM_ADE']:.4f}")
-    # print(f"[Val] Swarm FDE={val_metrics['SWARM_FDE']:.4f}")
 
     print("\n===== VALIDATION RESULTS =====")
     for k, v in val_metrics.items():
@@ -110,7 +85,6 @@ def main():
     metrics_path = os.path.join(save_path, filename)
 
     row = {
-        # "epoch": epoch,
         **val_metrics
     }
 

@@ -12,7 +12,6 @@ from timm.utils import ModelEma
 from torch.utils.data import DataLoader, DistributedSampler
 from torch.nn.parallel import DistributedDataParallel as DDP
 
-# from diffusion_planner.model.diffusion_planner import Diffusion_Planner
 from baselines.transformer_planner_wrapper import Transformer_Planner
 from diffusion_planner.utils.swarm_dataset import SwarmDataset
 
@@ -20,7 +19,6 @@ from diffusion_planner.utils.train_utils import set_seed, save_model, resume_mod
 from diffusion_planner.utils.normalizer import ObservationNormalizer, StateNormalizer
 from diffusion_planner.utils.lr_schedule import CosineAnnealingWarmUpRestarts
 from diffusion_planner.utils.tb_log import TensorBoardLogger as Logger
-from diffusion_planner.utils.data_augmentation import StatePerturbation
 from diffusion_planner.utils.swarm_data_augmentation import SwarmStatePerturbation
 from diffusion_planner.utils import ddp
 
@@ -46,9 +44,7 @@ def get_args():
                         default="diffusion-planner-training")
     parser.add_argument('--save_dir', type=str, help='save dir for model ckpt', default=".")
 
-    # Data
     parser.add_argument('--train_set', type=str, help='path to train data', default=None)
-    # parser.add_argument('--train_set_list', type=str, help='data list of train data', default=None)
     parser.add_argument('--val_set', type=str, required=True)
     parser.add_argument('--test_set', type=str, required=False)
 
@@ -76,7 +72,6 @@ def get_args():
     parser.add_argument('--route_state_dim', type=int, help='state dim for route lane point', default=12)
     parser.add_argument('--route_num', type=int, help='number of route lanes', default=25)
 
-    # DataLoader parameters
     parser.add_argument('--augment_prob', type=float, help='augmentation probability', default=0.5)
     parser.add_argument('--normalization_file_path', default='normalization.json',
                         help='filepath of normalizaiton.json', type=str)
@@ -87,7 +82,6 @@ def get_args():
     parser.add_argument('--no-pin-mem', action='store_false', dest='pin_mem', help='')
     parser.set_defaults(pin_mem=True)
 
-    # Training
     parser.add_argument('--seed', type=int, help='fix random seed', default=3407)
     parser.add_argument('--train_epochs', type=int, help='epochs of training', default=1)
     parser.add_argument('--save_utd', type=int, help='save frequency', default=20)
@@ -104,7 +98,6 @@ def get_args():
 
     parser.add_argument('--use_ema', default=True, type=boolean)
 
-    # Model
     parser.add_argument('--encoder_depth', type=int, help='number of encoding layers', default=3)
     parser.add_argument('--decoder_depth', type=int, help='number of decoding layers', default=3)
     parser.add_argument('--num_heads', type=int, help='number of multi-head', default=6)
@@ -112,14 +105,12 @@ def get_args():
     parser.add_argument('--diffusion_model_type', type=str, help='type of diffusion model [x_start, score]',
                         choices=['score', 'x_start'], default='x_start')
 
-    # decoder
     parser.add_argument('--predicted_neighbor_num', type=int, help='number of neighbor agents to predict', default=16)
     parser.add_argument('--resume_model_path', type=str, help='path to resume model', default=None)
 
     parser.add_argument('--use_wandb', default=False, type=boolean)
     parser.add_argument('--notes', default='', type=str)
 
-    # distributed training parameters
     parser.add_argument('--ddp', default=False, type=boolean, help='use ddp or not')
     parser.add_argument('--port', default='22323', type=str, help='port')
 
@@ -139,7 +130,6 @@ def model_training(args):
     global_rank, rank, _ = ddp.ddp_setup_universal(True, args)
 
     if global_rank == 0:
-        # Logging
         print("------------- {} -------------".format(args.name))
         print("Batch size: {}".format(args.batch_size))
         print("Learning rate: {}".format(args.learning_rate))
@@ -155,7 +145,6 @@ def model_training(args):
             save_path = f"{args.save_dir}/training_log/{args.name}/{time}/"
             os.makedirs(save_path, exist_ok=True)
 
-        # Save args
         args_dict = vars(args)
         args_dict = {k: v if not isinstance(v, (StateNormalizer, ObservationNormalizer)) else v.to_dict() for k, v in
                      args_dict.items()}
@@ -165,23 +154,12 @@ def model_training(args):
     else:
         save_path = None
 
-    # set seed
     set_seed(args.seed + global_rank)
 
-    # training parameters
     train_epochs = args.train_epochs
     batch_size = args.batch_size
 
-    # set up data loaders
-    # aug = StatePerturbation(augment_prob=args.augment_prob, device=args.device) if args.use_data_augment else None
     aug = SwarmStatePerturbation(augment_prob=args.augment_prob, device=args.device) if args.use_data_augment else None
-    # train_set = DiffusionPlannerData(args.train_set, args.train_set_list, args.agent_num, args.predicted_neighbor_num, args.future_len)
-    # train_set = SwarmDataset(
-    #     data_dir=args.train_set,
-    #     #data_list=args.train_set_list,
-    #     past_neighbor_num=args.agent_num,
-    #     predicted_neighbor_num=args.predicted_neighbor_num
-    # )
 
     train_set = SwarmDataset(
         data_dir=args.train_set,
@@ -222,13 +200,6 @@ def model_training(args):
     if args.ddp:
         transformer_planner = DDP(transformer_planner, device_ids=[rank])
 
-    # set up model
-    # diffusion_planner = Diffusion_Planner(args)
-    # diffusion_planner = diffusion_planner.to(rank if args.device == 'cuda' else args.device)
-    #
-    # if args.ddp:
-    #     diffusion_planner = DDP(diffusion_planner, device_ids=[rank])
-
     if args.use_ema:
         model_ema = ModelEma(
             transformer_planner,
@@ -240,7 +211,6 @@ def model_training(args):
         print(
             "Model Params: {}".format(sum(p.numel() for p in ddp.get_model(transformer_planner, args.ddp).parameters())))
 
-    # optimizer
     params = [{'params': ddp.get_model(transformer_planner, args.ddp).parameters(), 'lr': args.learning_rate}]
 
     optimizer = optim.AdamW(params)
@@ -256,7 +226,6 @@ def model_training(args):
         init_epoch = 0
         wandb_id = None
 
-    # logger
     wandb_logger = Logger(args.name, args.notes, args, wandb_resume_id=wandb_id, save_path=save_path, rank=global_rank)
 
     if args.ddp:
@@ -269,7 +238,6 @@ def model_training(args):
         "ADE": [],
     }
 
-    # begin training
     for epoch in range(init_epoch, train_epochs):
         if global_rank == 0:
             print(f"Epoch {epoch + 1}/{train_epochs}")
@@ -280,7 +248,6 @@ def model_training(args):
             wandb_logger.log_metrics({f"train_loss/{k}": v for k, v in train_loss.items()}, step=epoch + 1)
             wandb_logger.log_metrics({f"lr/{k}": v for k, v in lr_dict.items()}, step=epoch + 1)
 
-            # save model at the end of epoch
             save_model(transformer_planner, optimizer, scheduler, save_path, epoch, train_total_loss, wandb_logger.id,
                        model_ema.ema)
             print(f"Model saved in {save_path}\n")
@@ -311,9 +278,6 @@ def model_training(args):
             else:
                 df.to_csv(metrics_path, mode="a", header=False, index=False)
 
-            # -------------------------
-            # FULL VALIDATION
-            # -------------------------
             if (epoch + 1) % args.full_val_every == 0:
 
                 val_metrics = validate_epoch(
@@ -342,7 +306,6 @@ def model_training(args):
                 else:
                     df.to_csv(metrics_path, mode="a", header=False, index=False)
 
-                # save best
                 if val_metrics["ADE"] < best_ade:
                     best_ade = val_metrics["ADE"]
 

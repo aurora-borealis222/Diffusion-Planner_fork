@@ -13,12 +13,9 @@ class Encoder(nn.Module):
         self.hidden_dim = config.hidden_dim
 
         self.token_num = config.agent_num
-        # + config.static_objects_num + config.lane_num)
 
         self.neighbor_encoder = AgentFusionEncoder(5, drop_path_rate=config.encoder_drop_path_rate, hidden_dim=config.hidden_dim, depth=config.encoder_depth)
-        # self.static_encoder = StaticFusionEncoder(config.static_objects_state_dim, drop_path_rate=config.encoder_drop_path_rate, hidden_dim=config.hidden_dim)
-        # self.lane_encoder = LaneFusionEncoder(config.lane_len, drop_path_rate=config.encoder_drop_path_rate, hidden_dim=config.hidden_dim, depth=config.encoder_depth)
-    
+
         self.fusion = FusionEncoder(
             hidden_dim=config.hidden_dim, 
             num_heads=config.num_heads, 
@@ -34,22 +31,11 @@ class Encoder(nn.Module):
 
         encoder_outputs = {}
 
-        # agents
         neighbors = inputs['neighbor_agents_past']
-
-        # static objects
-        # static = inputs['static_objects']
-
-        # vector maps
-        # lanes = inputs['lanes']
-        # lanes_speed_limit = inputs['lanes_speed_limit']
-        # lanes_has_speed_limit = inputs['lanes_has_speed_limit']
 
         B = neighbors.shape[0]
 
         encoding_neighbors, neighbors_mask, neighbor_pos = self.neighbor_encoder(neighbors)
-        # encoding_static, static_mask, static_pos = self.static_encoder(static)
-        # encoding_lanes, lanes_mask, lane_pos = self.lane_encoder(lanes, lanes_speed_limit, lanes_has_speed_limit)
 
         encoding_input = encoding_neighbors
 
@@ -92,8 +78,6 @@ class AgentFusionEncoder(nn.Module):
         self._hidden_dim = hidden_dim
         self._channel = channels_mlp_dim
 
-        # self.type_emb = nn.Linear(3, channels_mlp_dim)
-
         self.channel_pre_project = Mlp(in_features=6+1, hidden_features=channels_mlp_dim, out_features=channels_mlp_dim, act_layer=nn.GELU, drop=0.)
         self.token_pre_project = Mlp(in_features=time_len, hidden_features=tokens_mlp_dim, out_features=tokens_mlp_dim, act_layer=nn.GELU, drop=0.)
 
@@ -112,25 +96,16 @@ class AgentFusionEncoder(nn.Module):
         B, P, V, D = x.shape
         assert D == 6
 
-        # position embedding
-        # pos = torch.zeros((B, P, 7), device=x.device)
-
         pos = x[:, :, -1, :4]
 
-        # agent type
-        # pos[..., -3] = 1.0
-
-        # valid mask
         mask_v = torch.sum(torch.ne(x, 0), dim=-1) == 0
         mask_p = torch.sum(~mask_v, dim=-1) == 0
 
-        # add validity channel
         x = torch.cat(
             [x, (~mask_v).float().unsqueeze(-1)],
             dim=-1
         )
 
-        # -> [B*P, V, 7]
         x = x.view(B * P, V, 7)
 
         valid_indices = ~mask_p.view(-1)
@@ -151,107 +126,6 @@ class AgentFusionEncoder(nn.Module):
         out[valid_indices] = x
 
         return out.view(B, P, -1), mask_p, pos
-
-
-    # def forward(self, x):
-    #     """
-    #     x: B, P, V, 4  (x, y, cos, sin)
-    #     """
-    #     # x: B, P, V, D
-    #     # print("Agent input:", x.shape)
-    #
-    #     B, P, V, D = x.shape
-    #     assert D == 4, f"Expected 4 features, got {D}"
-    #
-    #     # === position embedding ===
-    #     pos = x[:, :, -1, :]  # B, P, 4
-    #     # pos = torch.zeros((B, P, 7), device=x.device)
-    #     # pos[..., :4] = x[:, :, -1, :]  # x, y, cos, sin
-    #     # pos[..., -3] = 1.0  # agent type
-    #
-    #     # === valid mask (VERY IMPORTANT) ===
-    #     # print("Before mask, x:", x.shape)
-    #     mask_v = torch.sum(torch.ne(x, 0), dim=-1) == 0  # B,P,V
-    #     # print("mask_v:", mask_v.shape)
-    #
-    #     mask_p = torch.sum(~mask_v, dim=-1) == 0  # B,P
-    #
-    #     # add validity channel
-    #     x = torch.cat([x, (~mask_v).float().unsqueeze(-1)], dim=-1)
-    #     # print("After cat, x:", x.shape)
-    #     # x: B,P,V,5
-    #
-    #     x = x.view(B * P, V, 5)
-    #     valid_indices = ~mask_p.view(-1)
-    #     x = x[valid_indices]
-    #
-    #     # === MLP Mixer ===
-    #     x = self.channel_pre_project(x)
-    #     x = x.permute(0, 2, 1)
-    #     x = self.token_pre_project(x)
-    #     x = x.permute(0, 2, 1)
-    #
-    #     for block in self.blocks:
-    #         x = block(x)
-    #
-    #     x = x.mean(dim=1)
-    #     x = self.emb_project(self.norm(x))
-    #
-    #     # restore shape
-    #     out = torch.zeros((B * P, x.shape[-1]), device=x.device)
-    #     out[valid_indices] = x
-    #
-    #     return out.view(B, P, -1), mask_p, pos
-
-    # def forward(self, x):
-    #     '''
-    #     x: B, P, V, D (x, y, cos, sin, vx, vy, w, l, type(3))
-    #     '''
-    #     neighbor_type = None
-    #     #x = x[..., :4]
-    #
-    #     # pos = x[:, :, -1, :7].clone() # x, y, cos, sin
-    #     # # neighbor: [1,0,0]
-    #     # pos[..., -3:] = 0.0
-    #     # pos[..., -3] = 1.0
-    #
-    #     B, P, V, _ = x.shape
-    #
-    #     pos = torch.zeros((B, P, 7), device=x.device)
-    #     pos[..., :4] = x[:, :, -1, :4]  # x, y, cos, sin
-    #
-    #     # agent token type
-    #     pos[..., -3] = 1.0
-    #
-    #     mask_v = torch.sum(torch.ne(x[..., :8], 0), dim=-1).to(x.device) == 0
-    #     mask_p = torch.sum(~mask_v, dim=-1) == 0
-    #     x = torch.cat([x, (~mask_v).float().unsqueeze(-1)], dim=-1)
-    #     x = x.view(B * P, V, -1)
-    #
-    #     valid_indices = ~mask_p.view(-1)
-    #     x = x[valid_indices]
-    #
-    #     x = self.channel_pre_project(x)
-    #     x = x.permute(0, 2, 1)
-    #     x = self.token_pre_project(x)
-    #     x = x.permute(0, 2, 1)
-    #     for block in self.blocks:
-    #         x = block(x)
-    #
-    #     # pooling
-    #     x = torch.mean(x, dim=1)
-    #
-    #     neighbor_type = neighbor_type.view(B * P, -1)
-    #     neighbor_type = neighbor_type[valid_indices]
-    #     # type_embedding = self.type_emb(neighbor_type)  # Type embedding for valid data
-    #     # x = x + type_embedding
-    #
-    #     x = self.emb_project(self.norm(x))
-    #
-    #     x_result = torch.zeros((B * P, x.shape[-1]), device=x.device)
-    #     x_result[valid_indices] = x  # Fill in valid parts
-    #
-    #     return x_result.view(B, P, -1) , mask_p.reshape(B, -1), pos.view(B, P, -1)
 
     
 class StaticFusionEncoder(nn.Module):
