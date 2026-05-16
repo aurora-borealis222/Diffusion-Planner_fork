@@ -26,7 +26,7 @@ International Conference on Learning Representation (ICLR), 2025
 
 ## Начало работы
 
-- Установка окружения conda
+Установка окружения conda
 ```
 conda create -n diffusion_planner python=3.9
 conda activate diffusion_planner
@@ -39,22 +39,22 @@ pip install -r requirements_torch.txt
 ```
 
 ### Обучение
-- Предобработка данных
+Предобработка данных
 ```bash
 chmod +x swarm_data_process.sh
 ./swarm_data_process.sh
 python swarm_data_postprocess.py
 ```
-- Разделение данных на train/val/test
+Разделение данных на train/val/test
 ```bash
 python dataset_split_run.py
 ```
-- Запуск обучения с проверкой на валидационной выборке
+Запуск обучения с проверкой на валидационной выборке
 ```bash
 chmod +x torch_run.sh
 ./torch_run.sh
 ```
-- Запуск только валидвции
+Запуск только валидации
 ```bash
 chmod +x validate_only.sh
 ./validate_only.sh
