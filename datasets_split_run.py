@@ -11,9 +11,6 @@ TRAIN_RATIO = 0.70
 VAL_RATIO   = 0.15
 TEST_RATIO  = 0.15
 
-# ----------------------------
-# Найти только experiment folders
-# ----------------------------
 experiments = []
 
 for name in sorted(os.listdir(DATA_DIR)):
@@ -25,22 +22,15 @@ for name in sorted(os.listdir(DATA_DIR)):
     if not name.startswith("experiment_"):
         continue
 
-    # проверить что внутри есть npy
     has_npy = any(f.endswith(".npy") for f in os.listdir(full_path))
     if has_npy:
         experiments.append(name)
 
 print(f"Found {len(experiments)} valid experiments")
 
-# ----------------------------
-# Shuffle reproducibly
-# ----------------------------
 random.seed(SEED)
 random.shuffle(experiments)
 
-# ----------------------------
-# Split
-# ----------------------------
 n = len(experiments)
 
 n_train = int(n * TRAIN_RATIO)
@@ -50,9 +40,6 @@ train = experiments[:n_train]
 val   = experiments[n_train:n_train+n_val]
 test  = experiments[n_train+n_val:]
 
-# ----------------------------
-# Save
-# ----------------------------
 with open("train.json", "w") as f:
     json.dump(train, f, indent=2)
 
@@ -62,9 +49,6 @@ with open("val.json", "w") as f:
 with open("test.json", "w") as f:
     json.dump(test, f, indent=2)
 
-# ----------------------------
-# Stats
-# ----------------------------
 print("Split complete:")
 print(f"Train: {len(train)}")
 print(f"Val:   {len(val)}")
