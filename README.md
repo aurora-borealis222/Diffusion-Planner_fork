@@ -12,6 +12,8 @@ International Conference on Learning Representation (ICLR), 2025
 Форк модели [Diffusion Planner (ICLR 2025)](https://zhengyinan-air.github.io/Diffusion-Planner/),
 адаптированной для задачи предсказания траекторий в многоагентных системах роевых роботов.
 
+<image src="assets/img/architecture.png" width=100%>
+
 ## О проекте
 
 Оригинальный Diffusion Planner разработан для планирования траекторий
